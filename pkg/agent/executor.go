@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	"github.com/illumination-k/kodama/pkg/agent/auth"
-	"github.com/illumination-k/kodama/pkg/git"
+	"github.com/illumination-k/kodama/pkg/kubernetes"
 )
 
 // realCodingAgentExecutor implements CodingAgentExecutor using kubectl exec
 type realCodingAgentExecutor struct {
-	commandExecutor git.CommandExecutor
+	commandExecutor kubernetes.CommandExecutor
 	authProvider    auth.AuthProvider
 	sanitizer       *auth.Sanitizer
 }
@@ -21,7 +21,7 @@ type realCodingAgentExecutor struct {
 func NewCodingAgentExecutor() CodingAgentExecutor {
 	authProvider, _ := auth.GetDefaultAuthProvider() // Ignore error, auth is optional
 	return &realCodingAgentExecutor{
-		commandExecutor: git.NewKubectlExecutor(),
+		commandExecutor: kubernetes.NewKubectlExecutor(),
 		authProvider:    authProvider,
 		sanitizer:       auth.NewSanitizer(),
 	}
@@ -30,7 +30,7 @@ func NewCodingAgentExecutor() CodingAgentExecutor {
 // NewCodingAgentExecutorWithAuth creates executor with specified auth provider
 func NewCodingAgentExecutorWithAuth(authProvider auth.AuthProvider) CodingAgentExecutor {
 	return &realCodingAgentExecutor{
-		commandExecutor: git.NewKubectlExecutor(),
+		commandExecutor: kubernetes.NewKubectlExecutor(),
 		authProvider:    authProvider,
 		sanitizer:       auth.NewSanitizer(),
 	}
@@ -38,7 +38,7 @@ func NewCodingAgentExecutorWithAuth(authProvider auth.AuthProvider) CodingAgentE
 
 // NewCodingAgentExecutorWithCommandExecutor creates executor with custom command executor
 // This is useful for testing and dependency injection
-func NewCodingAgentExecutorWithCommandExecutor(cmdExec git.CommandExecutor) CodingAgentExecutor {
+func NewCodingAgentExecutorWithCommandExecutor(cmdExec kubernetes.CommandExecutor) CodingAgentExecutor {
 	authProvider, _ := auth.GetDefaultAuthProvider() // Ignore error, auth is optional
 	return &realCodingAgentExecutor{
 		commandExecutor: cmdExec,

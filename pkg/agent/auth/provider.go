@@ -13,8 +13,6 @@ func NewAuthProvider(config AuthConfig) (AuthProvider, error) {
 		return NewTokenProvider(config.TokenSource), nil
 	case AuthTypeFile:
 		return NewFileProvider(config.FileSource), nil
-	case AuthTypeFederated:
-		return NewFederatedProvider(config.FederatedSource), nil
 	default:
 		return nil, fmt.Errorf("unsupported auth type: %s", config.Type)
 	}

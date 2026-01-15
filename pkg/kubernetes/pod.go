@@ -148,8 +148,6 @@ func (c *Client) injectClaudeAuth(pod *corev1.Pod, spec *PodSpec) {
 		c.injectTokenAuth(pod, spec)
 	case "file":
 		c.injectFileAuth(pod, spec)
-	case "federated":
-		c.injectFederatedAuth(pod, spec)
 	}
 }
 
@@ -211,34 +209,6 @@ func (c *Client) injectFileAuth(pod *corev1.Pod, spec *PodSpec) {
 		Value: "/.kodama/claude-auth.json",
 	}
 	pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, envVar)
-}
-
-// injectFederatedAuth injects federated/OAuth authentication
-func (c *Client) injectFederatedAuth(pod *corev1.Pod, spec *PodSpec) {
-	// Inject OAuth configuration as environment variables
-	for key, value := range spec.ClaudeEnvVars {
-		envVar := corev1.EnvVar{
-			Name:  key,
-			Value: value,
-		}
-		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, envVar)
-	}
-
-	// Inject client secret from K8s secret if specified
-	if spec.ClaudeSecretName != "" {
-		envVar := corev1.EnvVar{
-			Name: "CLAUDE_OAUTH_CLIENT_SECRET",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: spec.ClaudeSecretName,
-					},
-					Key: "clientSecret",
-				},
-			},
-		}
-		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, envVar)
-	}
 }
 
 // GetPod retrieves pod information

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +94,7 @@ func TestSanitizeError(t *testing.T) {
 }
 
 func TestGitManager_Clone_Success(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -125,7 +126,7 @@ func TestGitManager_Clone_Success(t *testing.T) {
 }
 
 func TestGitManager_Clone_WithBranch(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -144,7 +145,7 @@ func TestGitManager_Clone_WithBranch(t *testing.T) {
 }
 
 func TestGitManager_Clone_WithToken(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -165,7 +166,7 @@ func TestGitManager_Clone_WithToken(t *testing.T) {
 }
 
 func TestGitManager_Clone_WithSSH(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -187,7 +188,7 @@ func TestGitManager_Clone_WithSSH(t *testing.T) {
 }
 
 func TestGitManager_Clone_Failure(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -202,7 +203,7 @@ func TestGitManager_Clone_Failure(t *testing.T) {
 }
 
 func TestGitManager_Clone_FailureWithTokenSanitization(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -219,7 +220,7 @@ func TestGitManager_Clone_FailureWithTokenSanitization(t *testing.T) {
 }
 
 func TestGitManager_GetCurrentBranch(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -237,7 +238,7 @@ func TestGitManager_GetCurrentBranch(t *testing.T) {
 }
 
 func TestGitManager_GetCurrentCommit(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -256,7 +257,7 @@ func TestGitManager_GetCurrentCommit(t *testing.T) {
 }
 
 func TestGitManager_GetCurrentBranch_Failure(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -271,7 +272,7 @@ func TestGitManager_GetCurrentBranch_Failure(t *testing.T) {
 }
 
 func TestGitManager_GetCurrentCommit_Failure(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -490,7 +491,7 @@ func TestSanitizeBranchName(t *testing.T) {
 }
 
 func TestGitManager_BranchExists_BothExist(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -508,7 +509,7 @@ func TestGitManager_BranchExists_BothExist(t *testing.T) {
 }
 
 func TestGitManager_BranchExists_OnlyLocal(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -526,7 +527,7 @@ func TestGitManager_BranchExists_OnlyLocal(t *testing.T) {
 }
 
 func TestGitManager_BranchExists_OnlyRemote(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -544,7 +545,7 @@ func TestGitManager_BranchExists_OnlyRemote(t *testing.T) {
 }
 
 func TestGitManager_BranchExists_Neither(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -562,7 +563,7 @@ func TestGitManager_BranchExists_Neither(t *testing.T) {
 }
 
 func TestGitManager_BranchExists_NetworkError(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -581,7 +582,7 @@ func TestGitManager_BranchExists_NetworkError(t *testing.T) {
 }
 
 func TestGitManager_CreateBranch_Success(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -601,7 +602,7 @@ func TestGitManager_CreateBranch_Success(t *testing.T) {
 }
 
 func TestGitManager_CreateBranch_Failure(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -617,7 +618,7 @@ func TestGitManager_CreateBranch_Failure(t *testing.T) {
 }
 
 func TestGitManager_CheckoutBranch_Success(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()
@@ -637,7 +638,7 @@ func TestGitManager_CheckoutBranch_Success(t *testing.T) {
 }
 
 func TestGitManager_CheckoutBranch_Failure(t *testing.T) {
-	mockExec := NewMockExecutor()
+	mockExec := kubernetes.NewMockExecutor()
 	gitMgr := NewGitManagerWithExecutor(mockExec)
 
 	ctx := context.Background()

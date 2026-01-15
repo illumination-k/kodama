@@ -9,9 +9,8 @@ import (
 type AuthType string
 
 const (
-	AuthTypeToken     AuthType = "token"
-	AuthTypeFederated AuthType = "federated"
-	AuthTypeFile      AuthType = "file"
+	AuthTypeToken AuthType = "token"
+	AuthTypeFile  AuthType = "file"
 )
 
 // AuthProvider is the main interface for authentication providers
@@ -19,13 +18,13 @@ type AuthProvider interface {
 	// GetCredentials returns the authentication credentials
 	GetCredentials(ctx context.Context) (*Credentials, error)
 
-	// Type returns the authentication type (token, file, federated)
+	// Type returns the authentication type (token, file)
 	Type() AuthType
 
 	// NeedsRefresh indicates if credentials need to be refreshed
 	NeedsRefresh() bool
 
-	// Refresh attempts to refresh the credentials (for federated auth)
+	// Refresh attempts to refresh the credentials
 	Refresh(ctx context.Context) error
 }
 
@@ -38,10 +37,9 @@ type Credentials struct {
 
 // AuthConfig represents the configuration for authentication
 type AuthConfig struct {
-	Type            AuthType        // Authentication type
-	TokenSource     TokenConfig     // For token auth
-	FileSource      FileConfig      // For file auth
-	FederatedSource FederatedConfig // For federated auth
+	Type        AuthType    // Authentication type
+	TokenSource TokenConfig // For token auth
+	FileSource  FileConfig  // For file auth
 }
 
 // TokenConfig represents configuration for token-based authentication
@@ -64,18 +62,6 @@ type FileConfig struct {
 
 	// Profile name (for multi-profile auth files)
 	Profile string
-}
-
-// FederatedConfig represents configuration for federated authentication
-type FederatedConfig struct {
-	// OAuth/OIDC configuration
-	TokenEndpoint string // Token endpoint URL
-	ClientID      string
-	ClientSecret  string // Optional, from K8s secret
-	RefreshToken  string // For token refresh
-
-	// Token cache file (optional)
-	CacheFile string // e.g., ~/.kodama/token-cache.json
 }
 
 // AuthFile represents the structure of the auth file

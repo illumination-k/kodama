@@ -6,22 +6,24 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/illumination-k/kodama/pkg/kubernetes"
 )
 
 // simpleGitManager implements GitManager using kubectl exec
 type simpleGitManager struct {
-	executor CommandExecutor
+	executor kubernetes.CommandExecutor
 }
 
 // NewGitManager creates a GitManager instance with kubectl executor
 func NewGitManager() GitManager {
 	return &simpleGitManager{
-		executor: NewKubectlExecutor(),
+		executor: kubernetes.NewKubectlExecutor(),
 	}
 }
 
 // NewGitManagerWithExecutor creates a GitManager with custom executor (for testing)
-func NewGitManagerWithExecutor(executor CommandExecutor) GitManager {
+func NewGitManagerWithExecutor(executor kubernetes.CommandExecutor) GitManager {
 	return &simpleGitManager{
 		executor: executor,
 	}

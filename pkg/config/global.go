@@ -30,17 +30,14 @@ type GitConfig struct {
 
 // ClaudeConfig holds Claude authentication configuration
 type ClaudeConfig struct {
-	// Authentication type: token, file, or federated
-	AuthType string `yaml:"authType,omitempty"` // "token", "file", "federated"
+	// Authentication type: token, file
+	AuthType string `yaml:"authType,omitempty"` // "token", "file"
 
 	// Token authentication settings
 	Token TokenAuthConfig `yaml:"token,omitempty"`
 
 	// File authentication settings
 	File FileAuthConfig `yaml:"file,omitempty"`
-
-	// Federated authentication settings
-	Federated FederatedAuthConfig `yaml:"federated,omitempty"`
 }
 
 // TokenAuthConfig holds token authentication settings
@@ -60,19 +57,6 @@ type FileAuthConfig struct {
 
 	// Profile to use (default: "default")
 	Profile string `yaml:"profile,omitempty"`
-}
-
-// FederatedAuthConfig holds federated authentication settings
-type FederatedAuthConfig struct {
-	// OAuth/OIDC settings
-	TokenEndpoint string `yaml:"tokenEndpoint"`
-	ClientID      string `yaml:"clientId"`
-
-	// Client secret from K8s secret
-	SecretName string `yaml:"secretName,omitempty"`
-
-	// Token cache file
-	CacheFile string `yaml:"cacheFile,omitempty"`
 }
 
 // GlobalSyncConfig holds global sync-related configuration
