@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod init:*)",
+      "Bash(go get:*)",
+      "Bash(go run:*)",
+      "Bash(go build:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(mise run:*)",
+      "Bash(./bin/kubectl-kodama version:*)",
+      "Bash(go test:*)",
+      "Bash(./bin/kubectl-kodama:*)"
+    ]
+  }
+}

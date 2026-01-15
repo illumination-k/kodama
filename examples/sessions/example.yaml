@@ -1,0 +1,25 @@
+name: example-session
+namespace: default
+repo: github.com/illumination-k/myrepo
+branch: kodama/example-20250115143000
+baseBranch: main
+autoBranch: true
+
+podName: kodama-example-session
+workspacePVC: kodama-workspace-example-session
+claudeHomePVC: kodama-claude-home-example-session
+
+commitHash: abc123def456
+
+sync:
+  enabled: true
+  localPath: /Users/shogo/projects/myrepo
+  mutagenSession: kodama-example-session-sync
+
+status: Running
+createdAt: "2025-01-15T14:30:00Z"
+updatedAt: "2025-01-15T14:35:00Z"
+
+resources:
+  cpu: "2"
+  memory: "4Gi"
