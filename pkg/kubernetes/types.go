@@ -28,6 +28,13 @@ type PodSpec struct {
 	MemoryLimit   string
 	GitSecretName string
 	Command       []string
+
+	// Claude authentication
+	ClaudeAuthType   string            // "token", "file"
+	ClaudeSecretName string            // K8s secret for token
+	ClaudeSecretKey  string            // Key in secret (default: "token")
+	ClaudeAuthFile   string            // Path to auth file (for file auth)
+	ClaudeEnvVars    map[string]string // Additional env vars for auth
 }
 
 // PVCSpec contains specifications for creating a PersistentVolumeClaim

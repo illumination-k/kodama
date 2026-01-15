@@ -54,6 +54,11 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		}
 	}
 
+	// Add Claude authentication based on auth type
+	if spec.ClaudeAuthType != "" {
+		c.injectClaudeAuth(pod, spec)
+	}
+
 	// Add volume mounts if PVCs are specified (for future use)
 	if spec.WorkspacePVC != "" || spec.ClaudeHomePVC != "" {
 		volumes := []corev1.Volume{}
@@ -134,6 +139,76 @@ func (c *Client) buildResourceRequirements(cpu, memory string) corev1.ResourceRe
 	}
 
 	return requirements
+}
+
+// injectClaudeAuth injects Claude authentication configuration into the pod
+func (c *Client) injectClaudeAuth(pod *corev1.Pod, spec *PodSpec) {
+	switch spec.ClaudeAuthType {
+	case "token":
+		c.injectTokenAuth(pod, spec)
+	case "file":
+		c.injectFileAuth(pod, spec)
+	}
+}
+
+// injectTokenAuth injects token-based authentication
+func (c *Client) injectTokenAuth(pod *corev1.Pod, spec *PodSpec) {
+	if spec.ClaudeSecretName == "" {
+		return
+	}
+
+	secretKey := spec.ClaudeSecretKey
+	if secretKey == "" {
+		secretKey = "token"
+	}
+
+	envVar := corev1.EnvVar{
+		Name: "CLAUDE_CODE_AUTH_TOKEN",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: spec.ClaudeSecretName,
+				},
+				Key: secretKey,
+			},
+		},
+	}
+
+	pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, envVar)
+}
+
+// injectFileAuth injects file-based authentication
+func (c *Client) injectFileAuth(pod *corev1.Pod, spec *PodSpec) {
+	if spec.ClaudeSecretName == "" || spec.ClaudeAuthFile == "" {
+		return
+	}
+
+	// Add volume for auth file
+	volume := corev1.Volume{
+		Name: "claude-auth-file",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: spec.ClaudeSecretName,
+			},
+		},
+	}
+	pod.Spec.Volumes = append(pod.Spec.Volumes, volume)
+
+	// Mount auth file
+	volumeMount := corev1.VolumeMount{
+		Name:      "claude-auth-file",
+		MountPath: "/.kodama/claude-auth.json",
+		SubPath:   "auth.json",
+		ReadOnly:  true,
+	}
+	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts, volumeMount)
+
+	// Set environment variable for auth file location
+	envVar := corev1.EnvVar{
+		Name:  "CLAUDE_AUTH_FILE",
+		Value: "/.kodama/claude-auth.json",
+	}
+	pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, envVar)
 }
 
 // GetPod retrieves pod information

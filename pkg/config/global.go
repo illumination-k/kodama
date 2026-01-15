@@ -5,6 +5,7 @@ type GlobalConfig struct {
 	Defaults DefaultsConfig   `yaml:"defaults"`
 	Sync     GlobalSyncConfig `yaml:"sync,omitempty"`
 	Git      GitConfig        `yaml:"git,omitempty"`
+	Claude   ClaudeConfig     `yaml:"claude,omitempty"`
 }
 
 // DefaultsConfig holds default values for session creation
@@ -25,6 +26,37 @@ type StorageConfig struct {
 // GitConfig holds Git-related configuration
 type GitConfig struct {
 	SecretName string `yaml:"secretName,omitempty"`
+}
+
+// ClaudeConfig holds Claude authentication configuration
+type ClaudeConfig struct {
+	// Authentication type: token, file
+	AuthType string `yaml:"authType,omitempty"` // "token", "file"
+
+	// Token authentication settings
+	Token TokenAuthConfig `yaml:"token,omitempty"`
+
+	// File authentication settings
+	File FileAuthConfig `yaml:"file,omitempty"`
+}
+
+// TokenAuthConfig holds token authentication settings
+type TokenAuthConfig struct {
+	// K8s secret name for token
+	SecretName string `yaml:"secretName,omitempty"`
+	SecretKey  string `yaml:"secretKey,omitempty"` // Default: "token"
+
+	// Environment variable name
+	EnvVar string `yaml:"envVar,omitempty"` // Default: "CLAUDE_CODE_AUTH_TOKEN"
+}
+
+// FileAuthConfig holds file authentication settings
+type FileAuthConfig struct {
+	// Path to auth file (default: ~/.kodama/claude-auth.json)
+	Path string `yaml:"path,omitempty"`
+
+	// Profile to use (default: "default")
+	Profile string `yaml:"profile,omitempty"`
 }
 
 // GlobalSyncConfig holds global sync-related configuration

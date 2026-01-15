@@ -27,25 +27,44 @@ const (
 	StatusFailed   SessionStatus = "Failed"
 )
 
+// AgentExecution represents a single agent execution record
+type AgentExecution struct {
+	ExecutedAt time.Time `yaml:"executedAt"`
+	Prompt     string    `yaml:"prompt,omitempty"`
+	TaskID     string    `yaml:"taskID,omitempty"`
+	Status     string    `yaml:"status"` // "pending", "running", "completed", "failed"
+	Error      string    `yaml:"error,omitempty"`
+}
+
 // SessionConfig represents a Kodama session configuration
 //
 //nolint:govet // fieldalignment: accepting minor memory overhead for logical field grouping
 type SessionConfig struct {
-	CreatedAt     time.Time      `yaml:"createdAt"`
-	UpdatedAt     time.Time      `yaml:"updatedAt"`
-	Sync          SyncConfig     `yaml:"sync,omitempty"`
-	Resources     ResourceConfig `yaml:"resources,omitempty"`
-	Name          string         `yaml:"name"`
-	Namespace     string         `yaml:"namespace"`
-	Repo          string         `yaml:"repo"`
-	Branch        string         `yaml:"branch"`
-	BaseBranch    string         `yaml:"baseBranch,omitempty"`
-	PodName       string         `yaml:"podName"`
-	WorkspacePVC  string         `yaml:"workspacePVC"`
-	ClaudeHomePVC string         `yaml:"claudeHomePVC"`
-	CommitHash    string         `yaml:"commitHash,omitempty"`
-	Status        SessionStatus  `yaml:"status"`
-	AutoBranch    bool           `yaml:"autoBranch,omitempty"`
+	CreatedAt       time.Time           `yaml:"createdAt"`
+	UpdatedAt       time.Time           `yaml:"updatedAt"`
+	Sync            SyncConfig          `yaml:"sync,omitempty"`
+	Resources       ResourceConfig      `yaml:"resources,omitempty"`
+	Name            string              `yaml:"name"`
+	Namespace       string              `yaml:"namespace"`
+	Repo            string              `yaml:"repo"`
+	Branch          string              `yaml:"branch"`
+	BaseBranch      string              `yaml:"baseBranch,omitempty"`
+	PodName         string              `yaml:"podName"`
+	WorkspacePVC    string              `yaml:"workspacePVC"`
+	ClaudeHomePVC   string              `yaml:"claudeHomePVC"`
+	CommitHash      string              `yaml:"commitHash,omitempty"`
+	Status          SessionStatus       `yaml:"status"`
+	AutoBranch      bool                `yaml:"autoBranch,omitempty"`
+	ClaudeAuth      *ClaudeAuthOverride `yaml:"claudeAuth,omitempty"`
+	AgentExecutions []AgentExecution    `yaml:"agentExecutions,omitempty"`
+	LastAgentRun    *time.Time          `yaml:"lastAgentRun,omitempty"`
+}
+
+// ClaudeAuthOverride allows per-session authentication overrides
+type ClaudeAuthOverride struct {
+	AuthType   string `yaml:"authType,omitempty"`   // Override global auth type
+	SecretName string `yaml:"secretName,omitempty"` // Override secret name
+	Profile    string `yaml:"profile,omitempty"`    // Override file auth profile
 }
 
 // SyncConfig holds configuration for file synchronization
@@ -89,4 +108,30 @@ func (s *SessionConfig) IsStopped() bool {
 func (s *SessionConfig) UpdateStatus(status SessionStatus) {
 	s.Status = status
 	s.UpdatedAt = time.Now()
+}
+
+// RecordAgentExecution adds a new agent execution record
+func (s *SessionConfig) RecordAgentExecution(execution AgentExecution) {
+	s.AgentExecutions = append(s.AgentExecutions, execution)
+	now := execution.ExecutedAt
+	s.LastAgentRun = &now
+	s.UpdatedAt = time.Now()
+}
+
+// GetLastAgentExecution returns the most recent agent execution
+func (s *SessionConfig) GetLastAgentExecution() *AgentExecution {
+	if len(s.AgentExecutions) == 0 {
+		return nil
+	}
+	return &s.AgentExecutions[len(s.AgentExecutions)-1]
+}
+
+// HasPendingAgentTask checks if there's a pending agent task
+func (s *SessionConfig) HasPendingAgentTask() bool {
+	for _, exec := range s.AgentExecutions {
+		if exec.Status == "pending" || exec.Status == "running" {
+			return true
+		}
+	}
+	return false
 }
