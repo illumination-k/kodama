@@ -56,8 +56,13 @@ jobs:
       - name: Test - Start session
         id: start
         run: |
-          echo "Testing: kubectl kodama start test-session --no-sync"
-          ./kubectl-kodama start test-session --no-sync --namespace default
+          echo "Testing: kubectl kodama start test-session with --sync"
+
+          # Create minimal test directory
+          mkdir -p /tmp/test-workspace
+          echo "# Test Project" > /tmp/test-workspace/README.md
+
+          ./kubectl-kodama start test-session --sync /tmp/test-workspace --namespace default
 
           # Verify pod was created
           kubectl get pod kodama-test-session -n default
@@ -92,6 +97,8 @@ jobs:
 
           # Verify pod was deleted (should fail with "not found")
           ! kubectl get pod kodama-test-session -n default 2>/dev/null || exit 1
+
+          sleep 3
 
           # Verify session was removed from list
           ! ./kubectl-kodama list | grep test-session || exit 1
