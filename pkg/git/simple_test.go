@@ -284,3 +284,370 @@ func TestGitManager_GetCurrentCommit_Failure(t *testing.T) {
 	assert.Empty(t, commit)
 	assert.Contains(t, err.Error(), "not a git repository")
 }
+
+func TestIsMainBranch(t *testing.T) {
+	tests := []struct {
+		name   string
+		branch string
+		want   bool
+	}{
+		{
+			name:   "main branch",
+			branch: "main",
+			want:   true,
+		},
+		{
+			name:   "master branch",
+			branch: "master",
+			want:   true,
+		},
+		{
+			name:   "trunk branch",
+			branch: "trunk",
+			want:   true,
+		},
+		{
+			name:   "development branch",
+			branch: "development",
+			want:   true,
+		},
+		{
+			name:   "main with uppercase",
+			branch: "Main",
+			want:   true,
+		},
+		{
+			name:   "master with uppercase",
+			branch: "MASTER",
+			want:   true,
+		},
+		{
+			name:   "main with whitespace",
+			branch: "  main  ",
+			want:   true,
+		},
+		{
+			name:   "feature branch",
+			branch: "feature/test",
+			want:   false,
+		},
+		{
+			name:   "kodama branch",
+			branch: "kodama/test-123",
+			want:   false,
+		},
+		{
+			name:   "develop branch",
+			branch: "develop",
+			want:   false,
+		},
+		{
+			name:   "empty string",
+			branch: "",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsMainBranch(tt.branch)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestGenerateBranchName(t *testing.T) {
+	tests := []struct {
+		name        string
+		prefix      string
+		sessionName string
+		wantPrefix  string
+		wantSuffix  bool
+	}{
+		{
+			name:        "standard case with prefix",
+			prefix:      "kodama/",
+			sessionName: "my-work",
+			wantPrefix:  "kodama/my-work-",
+			wantSuffix:  true,
+		},
+		{
+			name:        "prefix without trailing slash",
+			prefix:      "kodama",
+			sessionName: "test",
+			wantPrefix:  "kodama/test-",
+			wantSuffix:  true,
+		},
+		{
+			name:        "session name with spaces",
+			prefix:      "kodama/",
+			sessionName: "my work session",
+			wantPrefix:  "kodama/my-work-session-",
+			wantSuffix:  true,
+		},
+		{
+			name:        "session name with underscores",
+			prefix:      "kodama/",
+			sessionName: "my_work_session",
+			wantPrefix:  "kodama/my-work-session-",
+			wantSuffix:  true,
+		},
+		{
+			name:        "session name with uppercase",
+			prefix:      "kodama/",
+			sessionName: "MyWork",
+			wantPrefix:  "kodama/mywork-",
+			wantSuffix:  true,
+		},
+		{
+			name:        "empty prefix",
+			prefix:      "",
+			sessionName: "test",
+			wantPrefix:  "test-",
+			wantSuffix:  true,
+		},
+		{
+			name:        "session name with special chars",
+			prefix:      "kodama/",
+			sessionName: "test@123!",
+			wantPrefix:  "kodama/test123-",
+			wantSuffix:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GenerateBranchName(tt.prefix, tt.sessionName)
+
+			// Check prefix
+			assert.True(t, strings.HasPrefix(got, tt.wantPrefix), "expected prefix '%s', got '%s'", tt.wantPrefix, got)
+
+			// Check timestamp suffix (14 digits)
+			if tt.wantSuffix {
+				parts := strings.Split(got, "-")
+				lastPart := parts[len(parts)-1]
+				assert.Len(t, lastPart, 14, "timestamp should be 14 digits")
+				assert.Regexp(t, `^\d{14}$`, lastPart, "timestamp should be all digits")
+			}
+		})
+	}
+}
+
+func TestSanitizeBranchName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple name",
+			input:    "test",
+			expected: "test",
+		},
+		{
+			name:     "name with spaces",
+			input:    "my work",
+			expected: "my-work",
+		},
+		{
+			name:     "name with underscores",
+			input:    "my_work",
+			expected: "my-work",
+		},
+		{
+			name:     "name with uppercase",
+			input:    "MyWork",
+			expected: "mywork",
+		},
+		{
+			name:     "name with invalid git chars",
+			input:    "test~^:?*[",
+			expected: "test",
+		},
+		{
+			name:     "name with special chars",
+			input:    "test@123!",
+			expected: "test123",
+		},
+		{
+			name:     "name with leading/trailing hyphens",
+			input:    "-test-",
+			expected: "test",
+		},
+		{
+			name:     "mixed case with spaces and special chars",
+			input:    "My Test Work!",
+			expected: "my-test-work",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeBranchName(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestGitManager_BranchExists_BothExist(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/test"
+
+	// Configure mock: branch exists both locally and remotely
+	mockExec.SetResponse("git -C /workspace branch --list", "  feature/test\n", "", nil)
+	mockExec.SetResponse("git -C /workspace ls-remote", "abc123def456 refs/heads/feature/test\n", "", nil)
+
+	localExists, remoteExists, err := gitMgr.BranchExists(ctx, "ns", "pod", branchName)
+
+	require.NoError(t, err)
+	assert.True(t, localExists)
+	assert.True(t, remoteExists)
+}
+
+func TestGitManager_BranchExists_OnlyLocal(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/local"
+
+	// Branch exists locally but not remotely
+	mockExec.SetResponse("git -C /workspace branch --list", "  feature/local\n", "", nil)
+	mockExec.SetResponse("git -C /workspace ls-remote", "", "", nil)
+
+	localExists, remoteExists, err := gitMgr.BranchExists(ctx, "ns", "pod", branchName)
+
+	require.NoError(t, err)
+	assert.True(t, localExists)
+	assert.False(t, remoteExists)
+}
+
+func TestGitManager_BranchExists_OnlyRemote(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/remote"
+
+	// Branch exists remotely but not locally
+	mockExec.SetResponse("git -C /workspace branch --list", "", "", nil)
+	mockExec.SetResponse("git -C /workspace ls-remote", "abc123 refs/heads/feature/remote\n", "", nil)
+
+	localExists, remoteExists, err := gitMgr.BranchExists(ctx, "ns", "pod", branchName)
+
+	require.NoError(t, err)
+	assert.False(t, localExists)
+	assert.True(t, remoteExists)
+}
+
+func TestGitManager_BranchExists_Neither(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/nonexistent"
+
+	// Branch doesn't exist anywhere
+	mockExec.SetResponse("git -C /workspace branch --list", "", "", nil)
+	mockExec.SetResponse("git -C /workspace ls-remote", "", "", nil)
+
+	localExists, remoteExists, err := gitMgr.BranchExists(ctx, "ns", "pod", branchName)
+
+	require.NoError(t, err)
+	assert.False(t, localExists)
+	assert.False(t, remoteExists)
+}
+
+func TestGitManager_BranchExists_NetworkError(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/test"
+
+	// Local check succeeds, remote check fails (network error)
+	mockExec.SetResponse("git -C /workspace branch --list", "  feature/test\n", "", nil)
+	mockExec.SetResponse("git -C /workspace ls-remote", "", "fatal: unable to access remote", fmt.Errorf("network error"))
+
+	localExists, remoteExists, err := gitMgr.BranchExists(ctx, "ns", "pod", branchName)
+
+	// Network errors are non-fatal
+	require.NoError(t, err)
+	assert.True(t, localExists)
+	assert.False(t, remoteExists)
+}
+
+func TestGitManager_CreateBranch_Success(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/new-branch"
+
+	mockExec.SetResponse("git -C /workspace checkout -b", "", "", nil)
+
+	err := gitMgr.CreateBranch(ctx, "ns", "pod", branchName)
+
+	require.NoError(t, err)
+
+	commands := mockExec.GetCommands()
+	require.Len(t, commands, 1)
+	cmdStr := strings.Join(commands[0].Command, " ")
+	assert.Contains(t, cmdStr, "git -C /workspace checkout -b")
+	assert.Contains(t, cmdStr, branchName)
+}
+
+func TestGitManager_CreateBranch_Failure(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/existing"
+
+	mockExec.SetResponse("git -C /workspace checkout -b", "", "fatal: A branch named 'feature/existing' already exists", fmt.Errorf("exit code 128"))
+
+	err := gitMgr.CreateBranch(ctx, "ns", "pod", branchName)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create branch")
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestGitManager_CheckoutBranch_Success(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/existing"
+
+	mockExec.SetResponse("git -C /workspace checkout", "", "", nil)
+
+	err := gitMgr.CheckoutBranch(ctx, "ns", "pod", branchName)
+
+	require.NoError(t, err)
+
+	commands := mockExec.GetCommands()
+	require.Len(t, commands, 1)
+	cmdStr := strings.Join(commands[0].Command, " ")
+	assert.Contains(t, cmdStr, "git -C /workspace checkout")
+	assert.Contains(t, cmdStr, branchName)
+}
+
+func TestGitManager_CheckoutBranch_Failure(t *testing.T) {
+	mockExec := NewMockExecutor()
+	gitMgr := NewGitManagerWithExecutor(mockExec)
+
+	ctx := context.Background()
+	branchName := "feature/nonexistent"
+
+	mockExec.SetResponse("git -C /workspace checkout", "", "error: pathspec 'feature/nonexistent' did not match any file(s) known to git", fmt.Errorf("exit code 1"))
+
+	err := gitMgr.CheckoutBranch(ctx, "ns", "pod", branchName)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to checkout branch")
+	assert.Contains(t, err.Error(), "did not match")
+}

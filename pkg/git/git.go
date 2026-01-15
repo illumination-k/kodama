@@ -15,4 +15,14 @@ type GitManager interface {
 
 	// GetCurrentCommit returns the current commit hash in the pod's workspace
 	GetCurrentCommit(ctx context.Context, namespace, podName string) (string, error)
+
+	// BranchExists checks if a branch exists locally and/or remotely
+	// Returns (localExists bool, remoteExists bool, error)
+	BranchExists(ctx context.Context, namespace, podName, branchName string) (bool, bool, error)
+
+	// CreateBranch creates a new local branch from current HEAD
+	CreateBranch(ctx context.Context, namespace, podName, branchName string) error
+
+	// CheckoutBranch checks out an existing branch (local or remote)
+	CheckoutBranch(ctx context.Context, namespace, podName, branchName string) error
 }

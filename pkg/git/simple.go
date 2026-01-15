@@ -3,7 +3,9 @@ package git
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // simpleGitManager implements GitManager using kubectl exec
@@ -110,6 +112,57 @@ func (s *simpleGitManager) GetCurrentCommit(ctx context.Context, namespace, podN
 	return strings.TrimSpace(stdout), nil
 }
 
+// BranchExists checks if a branch exists locally and/or remotely
+// Returns (localExists bool, remoteExists bool, error)
+func (s *simpleGitManager) BranchExists(ctx context.Context, namespace, podName, branchName string) (bool, bool, error) {
+	// Check local branch
+	localArgs := []string{"git", "-C", "/workspace", "branch", "--list", branchName}
+	localStdout, _, localErr := s.executor.ExecInPod(ctx, namespace, podName, localArgs)
+
+	localExists := localErr == nil && strings.TrimSpace(localStdout) != ""
+
+	// Check remote branch
+	// Note: Network errors are non-fatal, we just return false for remote
+	remoteArgs := []string{"git", "-C", "/workspace", "ls-remote", "--heads", "origin", branchName}
+	remoteStdout, _, remoteErr := s.executor.ExecInPod(ctx, namespace, podName, remoteArgs)
+
+	remoteExists := false
+	if remoteErr == nil && strings.TrimSpace(remoteStdout) != "" {
+		// Parse output: "abc123def456 refs/heads/branchName"
+		// If output contains refs/heads/, the branch exists
+		if strings.Contains(remoteStdout, "refs/heads/") {
+			remoteExists = true
+		}
+	}
+
+	return localExists, remoteExists, nil
+}
+
+// CreateBranch creates a new local branch from current HEAD
+func (s *simpleGitManager) CreateBranch(ctx context.Context, namespace, podName, branchName string) error {
+	args := []string{"git", "-C", "/workspace", "checkout", "-b", branchName}
+
+	_, stderr, err := s.executor.ExecInPod(ctx, namespace, podName, args)
+	if err != nil {
+		return fmt.Errorf("failed to create branch '%s': %s: %w", branchName, stderr, err)
+	}
+
+	return nil
+}
+
+// CheckoutBranch checks out an existing branch (local or remote)
+func (s *simpleGitManager) CheckoutBranch(ctx context.Context, namespace, podName, branchName string) error {
+	// First try to checkout the branch directly
+	args := []string{"git", "-C", "/workspace", "checkout", branchName}
+
+	_, stderr, err := s.executor.ExecInPod(ctx, namespace, podName, args)
+	if err != nil {
+		return fmt.Errorf("failed to checkout branch '%s': %s: %w", branchName, stderr, err)
+	}
+
+	return nil
+}
+
 // injectToken adds GitHub token to HTTPS URL
 // For HTTPS URLs: https://github.com/user/repo.git -> https://<token>@github.com/user/repo.git
 // For SSH URLs: git@github.com:user/repo.git -> unchanged
@@ -126,4 +179,71 @@ func sanitizeError(errMsg, token string) string {
 		return errMsg
 	}
 	return strings.ReplaceAll(errMsg, token, "***")
+}
+
+// IsMainBranch checks if the given branch name is a protected main branch
+// Protected branches: main, master, trunk, development (case-insensitive)
+func IsMainBranch(branchName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(branchName))
+	mainBranches := []string{"main", "master", "trunk", "development"}
+
+	for _, main := range mainBranches {
+		if normalized == main {
+			return true
+		}
+	}
+	return false
+}
+
+// GenerateBranchName creates a timestamped branch name
+// Format: {prefix}{sanitized-session-name}-{YYYYMMDDHHmmss}
+// Example: kodama/my-work-20250115143000
+func GenerateBranchName(prefix, sessionName string) string {
+	// Sanitize session name for git branch compatibility
+	sanitized := sanitizeBranchName(sessionName)
+
+	// Generate timestamp
+	timestamp := time.Now().Format("20060102150405")
+
+	// Combine prefix, session name, and timestamp
+	if prefix == "" {
+		return fmt.Sprintf("%s-%s", sanitized, timestamp)
+	}
+
+	// Ensure prefix ends with / if it doesn't already
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	return fmt.Sprintf("%s%s-%s", prefix, sanitized, timestamp)
+}
+
+// sanitizeBranchName sanitizes a session name for use in git branch names
+// - Converts to lowercase
+// - Replaces spaces and underscores with hyphens
+// - Removes invalid git characters
+func sanitizeBranchName(name string) string {
+	// Convert to lowercase
+	name = strings.ToLower(name)
+
+	// Replace spaces and underscores with hyphens
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ReplaceAll(name, "_", "-")
+
+	// Remove invalid git characters
+	// Git branch names cannot contain: ~, ^, :, ?, *, [, \, .., @{
+	invalidChars := []string{"~", "^", ":", "?", "*", "[", "\\", "..", "@{", "@"}
+	for _, char := range invalidChars {
+		name = strings.ReplaceAll(name, char, "")
+	}
+
+	// Remove any remaining problematic characters using regex
+	// Keep only alphanumeric, hyphens, and forward slashes
+	reg := regexp.MustCompile(`[^a-z0-9\-/]+`)
+	name = reg.ReplaceAllString(name, "")
+
+	// Remove leading/trailing hyphens and slashes
+	name = strings.Trim(name, "-/")
+
+	return name
 }

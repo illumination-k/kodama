@@ -122,13 +122,14 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	// 5. Create session config
 	now := time.Now()
 	session := &config.SessionConfig{
-		Name:      name,
-		Namespace: namespace,
-		Repo:      repo,
-		PodName:   fmt.Sprintf("kodama-%s", name),
-		Status:    config.StatusPending,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Name:       name,
+		Namespace:  namespace,
+		Repo:       repo,
+		PodName:    fmt.Sprintf("kodama-%s", name),
+		Status:     config.StatusPending,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		AutoBranch: true, // Enable automatic branch management by default
 		Resources: config.ResourceConfig{
 			CPU:    cpu,
 			Memory: memory,
@@ -215,9 +216,82 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 
 		fmt.Println("✓ Repository cloned")
 
+		// 11.1 Handle automatic branch creation/checkout
+		currentBranch, branchErr := gitMgr.GetCurrentBranch(ctx, namespace, session.PodName)
+		if branchErr != nil {
+			// Log warning but don't fail - branch management is optional
+			fmt.Printf("⚠️  Warning: Could not determine current branch: %v\n", branchErr)
+			fmt.Println("   Continuing with current state.")
+		} else {
+			// Determine target branch
+			var targetBranch string
+			var needsNewBranch bool
+
+			switch {
+			case branch != "" && git.IsMainBranch(branch):
+				// User specified a main branch - auto-create new branch instead
+				fmt.Printf("⚠️  Main branch '%s' detected - creating feature branch instead\n", branch)
+				targetBranch = git.GenerateBranchName(globalConfig.Defaults.BranchPrefix, name)
+				needsNewBranch = true
+			case branch == "" && git.IsMainBranch(currentBranch):
+				// No branch specified and cloned default is main - create new branch
+				fmt.Printf("⚠️  Repository default branch '%s' is protected - creating feature branch\n", currentBranch)
+				targetBranch = git.GenerateBranchName(globalConfig.Defaults.BranchPrefix, name)
+				needsNewBranch = true
+			case branch != "" && branch != currentBranch:
+				// User specified a non-main branch - try to check it out
+				targetBranch = branch
+				needsNewBranch = false
+			default:
+				// Already on the correct branch (user-specified non-main)
+				targetBranch = currentBranch
+				needsNewBranch = false
+			}
+
+			// Handle branch creation or checkout if needed
+			if targetBranch != currentBranch {
+				fmt.Printf("⏳ Setting up branch: %s...\n", targetBranch)
+
+				// Check if branch exists
+				localExists, remoteExists, checkErr := gitMgr.BranchExists(ctx, namespace, session.PodName, targetBranch)
+				switch {
+				case checkErr != nil:
+					fmt.Printf("⚠️  Warning: Could not check branch existence: %v\n", checkErr)
+					fmt.Println("   Continuing with current branch.")
+				case remoteExists:
+					// Checkout existing remote branch
+					if checkoutErr := gitMgr.CheckoutBranch(ctx, namespace, session.PodName, targetBranch); checkoutErr != nil {
+						fmt.Printf("⚠️  Warning: Could not checkout remote branch '%s': %v\n", targetBranch, checkoutErr)
+						fmt.Println("   Continuing with current branch.")
+					} else {
+						fmt.Printf("✓ Checked out existing remote branch: %s\n", targetBranch)
+						currentBranch = targetBranch
+					}
+				case localExists:
+					// Checkout existing local branch
+					if checkoutErr := gitMgr.CheckoutBranch(ctx, namespace, session.PodName, targetBranch); checkoutErr != nil {
+						fmt.Printf("⚠️  Warning: Could not checkout branch '%s': %v\n", targetBranch, checkoutErr)
+						fmt.Println("   Continuing with current branch.")
+					} else {
+						fmt.Printf("✓ Checked out existing branch: %s\n", targetBranch)
+						currentBranch = targetBranch
+					}
+				case needsNewBranch || !localExists:
+					// Create new branch (either for main protection or user-specified branch doesn't exist)
+					if createErr := gitMgr.CreateBranch(ctx, namespace, session.PodName, targetBranch); createErr != nil {
+						fmt.Printf("⚠️  Warning: Could not create branch '%s': %v\n", targetBranch, createErr)
+						fmt.Println("   Continuing with current branch.")
+					} else {
+						fmt.Printf("✓ Created new branch: %s\n", targetBranch)
+						currentBranch = targetBranch
+					}
+				}
+			}
+		}
+
 		// Store git metadata in session
 		session.Repo = repo
-		session.Branch = branch
+		session.Branch = currentBranch // Use actual checked-out branch, not requested branch
 		currentCommit, commitErr := gitMgr.GetCurrentCommit(ctx, namespace, session.PodName)
 		if commitErr == nil {
 			session.CommitHash = currentCommit
