@@ -1,0 +1,141 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Create kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          cluster_name: kodama-test
+          wait: 30s
+
+      - name: Verify cluster
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Build kodama binary
+        run: |
+          go build -o kubectl-kodama ./cmd/kubectl-kodama
+          chmod +x kubectl-kodama
+          ./kubectl-kodama version
+
+      - name: Create global config
+        run: |
+          mkdir -p ~/.kodama
+          cat > ~/.kodama/config.yaml <<EOF
+          defaults:
+            namespace: default
+            image: ubuntu:22.04
+            resources:
+              cpu: "1"
+              memory: "1Gi"
+          EOF
+
+      - name: Test - Start session
+        id: start
+        run: |
+          echo "Testing: kubectl kodama start test-session --no-sync"
+          ./kubectl-kodama start test-session --no-sync --namespace default
+
+          # Verify pod was created
+          kubectl get pod kodama-test-session -n default
+
+          # Wait a bit for pod to fully stabilize
+          sleep 2
+
+      - name: Test - List sessions
+        run: |
+          echo "Testing: kubectl kodama list"
+          ./kubectl-kodama list
+
+          # Verify session appears in list
+          ./kubectl-kodama list | grep test-session
+
+      - name: Test - Get pod info
+        run: |
+          echo "Testing: kubectl get pod"
+          kubectl get pod kodama-test-session -n default -o wide
+          kubectl describe pod kodama-test-session -n default
+
+      - name: Test - Execute command in pod
+        run: |
+          echo "Testing: kubectl kodama attach with command"
+          ./kubectl-kodama attach test-session --command "pwd"
+          ./kubectl-kodama attach test-session --command "ls -la /workspace"
+
+      - name: Test - Delete session
+        run: |
+          echo "Testing: kubectl kodama delete test-session"
+          ./kubectl-kodama delete test-session --force
+
+          # Verify pod was deleted (should fail with "not found")
+          ! kubectl get pod kodama-test-session -n default 2>/dev/null || exit 1
+
+          # Verify session was removed from list
+          ! ./kubectl-kodama list | grep test-session || exit 1
+
+      - name: Test - Start with sync
+        run: |
+          echo "Testing: kubectl kodama start with --sync"
+
+          # Create test directory with files
+          mkdir -p /tmp/test-sync
+          echo "test content" > /tmp/test-sync/test.txt
+          echo "another file" > /tmp/test-sync/file2.txt
+
+          # Start session with sync
+          ./kubectl-kodama start sync-test --sync /tmp/test-sync --namespace default
+
+          # Wait for pod to be ready
+          sleep 3
+
+          # Verify files were synced to pod
+          kubectl exec -n default kodama-sync-test -- ls -la /workspace/
+          kubectl exec -n default kodama-sync-test -- cat /workspace/test.txt | grep "test content"
+          kubectl exec -n default kodama-sync-test -- cat /workspace/file2.txt | grep "another file"
+
+      - name: Cleanup - Delete sync-test session
+        if: always()
+        run: |
+          ./kubectl-kodama delete sync-test --force || true
+
+      - name: Display logs on failure
+        if: failure()
+        run: |
+          echo "=== Kodama sessions ==="
+          ./kubectl-kodama list || true
+
+          echo "=== All pods in default namespace ==="
+          kubectl get pods -n default || true
+
+          echo "=== Pod descriptions ==="
+          kubectl describe pods -n default || true
+
+          echo "=== Config file ==="
+          cat ~/.kodama/config.yaml || true
+
+          echo "=== Session configs ==="
+          ls -la ~/.kodama/sessions/ || true
+          cat ~/.kodama/sessions/*.yaml || true

@@ -26,6 +26,7 @@ type PodSpec struct {
 	ClaudeHomePVC string
 	CPULimit      string
 	MemoryLimit   string
+	GitSecretName string
 	Command       []string
 }
 

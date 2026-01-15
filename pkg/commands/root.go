@@ -23,7 +23,11 @@ environments in your Kubernetes cluster.`,
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Kubernetes namespace")
 	cmd.PersistentFlags().String("kubeconfig", "", "Path to kubeconfig file")
 
-	// Version command
+	// Add subcommands
+	cmd.AddCommand(NewStartCommand())
+	cmd.AddCommand(NewListCommand())
+	cmd.AddCommand(NewAttachCommand())
+	cmd.AddCommand(NewDeleteCommand())
 	cmd.AddCommand(newVersionCommand())
 
 	return cmd

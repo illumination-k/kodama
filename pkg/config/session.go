@@ -50,9 +50,11 @@ type SessionConfig struct {
 
 // SyncConfig holds configuration for file synchronization
 type SyncConfig struct {
-	LocalPath      string `yaml:"localPath,omitempty"`
-	MutagenSession string `yaml:"mutagenSession,omitempty"`
-	Enabled        bool   `yaml:"enabled"`
+	UseGitignore   *bool    `yaml:"useGitignore,omitempty"`
+	LocalPath      string   `yaml:"localPath,omitempty"`
+	MutagenSession string   `yaml:"mutagenSession,omitempty"`
+	Exclude        []string `yaml:"exclude,omitempty"`
+	Enabled        bool     `yaml:"enabled"`
 }
 
 // ResourceConfig holds resource limit configuration
@@ -69,9 +71,7 @@ func (s *SessionConfig) Validate() error {
 	if s.Namespace == "" {
 		return ErrNamespaceRequired
 	}
-	if s.Repo == "" {
-		return ErrRepoRequired
-	}
+	// Repo is now optional (not required when using sync)
 	return nil
 }
 

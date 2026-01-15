@@ -39,12 +39,12 @@ func TestSessionConfig_Validate(t *testing.T) {
 			wantErr: ErrNamespaceRequired,
 		},
 		{
-			name: "missing repo",
+			name: "missing repo (now optional)",
 			config: &SessionConfig{
 				Name:      "test-session",
 				Namespace: "default",
 			},
-			wantErr: ErrRepoRequired,
+			wantErr: nil,
 		},
 	}
 
