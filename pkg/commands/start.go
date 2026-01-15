@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/illumination-k/kodama/pkg/agent"
+	"github.com/illumination-k/kodama/pkg/agent/task"
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/git"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
@@ -17,13 +19,15 @@ import (
 // NewStartCommand creates a new start command
 func NewStartCommand() *cobra.Command {
 	var (
-		repo      string
-		syncPath  string
-		namespace string
-		cpu       string
-		memory    string
-		branch    string
-		noSync    bool
+		repo       string
+		syncPath   string
+		namespace  string
+		cpu        string
+		memory     string
+		branch     string
+		noSync     bool
+		prompt     string
+		promptFile string
 	)
 
 	cmd := &cobra.Command{
@@ -39,8 +43,13 @@ Examples:
   kubectl kodama start my-work --no-sync`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate mutual exclusivity of prompt flags
+			if prompt != "" && promptFile != "" {
+				return fmt.Errorf("cannot specify both --prompt and --prompt-file")
+			}
+
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
-			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, noSync, kubeconfigPath)
+			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, noSync, kubeconfigPath, prompt, promptFile)
 		},
 	}
 
@@ -52,11 +61,13 @@ Examples:
 	cmd.Flags().StringVar(&memory, "memory", "", "Memory limit (e.g., '2Gi', '4Gi')")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch to clone (default: repository default branch)")
 	cmd.Flags().BoolVar(&noSync, "no-sync", false, "Disable file synchronization")
+	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
+	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 
 	return cmd
 }
 
-func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath string) error {
+func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile string) error {
 	ctx := context.Background()
 
 	// 1. Load global config for defaults
@@ -325,7 +336,41 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		return fmt.Errorf("failed to save final session state: %w", err)
 	}
 
-	// 13. Print success message
+	// 13. Execute coding agent task if prompt provided
+	if prompt != "" || promptFile != "" {
+		var finalPrompt string
+		var promptErr error
+
+		if promptFile != "" {
+			fmt.Printf("\n⏳ Reading prompt from file: %s\n", promptFile)
+			finalPrompt, promptErr = task.ReadPromptFromFile(promptFile)
+			if promptErr != nil {
+				fmt.Printf("⚠️  Warning: Failed to read prompt file: %v\n", promptErr)
+				fmt.Println("   Session is running. You can manually invoke the agent later.")
+			} else {
+				fmt.Println("✓ Prompt loaded")
+			}
+		} else {
+			finalPrompt = prompt
+		}
+
+		// Only proceed with agent execution if we have a valid prompt
+		if promptErr == nil && finalPrompt != "" {
+			// Create agent executor
+			agentExecutor := agent.NewCodingAgentExecutor()
+
+			// Start the task
+			fmt.Println("\n🤖 Initiating coding agent...")
+			if agentErr := task.Start(ctx, agentExecutor, namespace, session.PodName, finalPrompt); agentErr != nil {
+				// Don't fail the entire start command if agent fails
+				// The session is already created and running
+				fmt.Printf("⚠️  Warning: Failed to start coding agent: %v\n", agentErr)
+				fmt.Println("   Session is running. You can manually invoke the agent later.")
+			}
+		}
+	}
+
+	// 14. Print success message
 	fmt.Printf("\n✨ Session '%s' is ready!\n", name)
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  kubectl kodama attach %s    # Attach to session\n", name)
