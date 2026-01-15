@@ -38,8 +38,8 @@ Creates a pod running claude-code and syncs files from your local machine.
 
 Examples:
   kubectl kodama start my-work --sync ~/projects/myrepo
-  kubectl kodama start my-work --namespace dev --cpu 2 --memory 4Gi
-  kubectl kodama start my-work --no-sync`,
+  kubectl kodama start my-work --repo https://github.com/user/repo --branch main
+  kubectl kodama start my-work --namespace dev --cpu 2 --memory 4Gi`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validate mutual exclusivity of prompt flags
