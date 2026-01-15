@@ -38,7 +38,7 @@ Examples:
 	return cmd
 }
 
-func runAttach(name, command string, kubeconfigPath string) error {
+func runAttach(name, command, kubeconfigPath string) error {
 	ctx := context.Background()
 
 	// 1. Load session config
@@ -78,7 +78,8 @@ func runAttach(name, command string, kubeconfigPath string) error {
 
 	if command != "" {
 		// Run specific command
-		execCmd = exec.Command("kubectl", "exec", "-it",
+		//#nosec G204 -- kubectl exec with user command is the intended functionality
+		execCmd = exec.CommandContext(ctx, "kubectl", "exec", "-it",
 			"-n", session.Namespace,
 			session.PodName,
 			"--",
@@ -86,7 +87,8 @@ func runAttach(name, command string, kubeconfigPath string) error {
 		)
 	} else {
 		// Open interactive shell
-		execCmd = exec.Command("kubectl", "exec", "-it",
+		//#nosec G204 -- kubectl exec with session data from config store
+		execCmd = exec.CommandContext(ctx, "kubectl", "exec", "-it",
 			"-n", session.Namespace,
 			session.PodName,
 			"--",

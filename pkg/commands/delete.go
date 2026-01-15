@@ -84,10 +84,10 @@ func runDelete(name string, keepConfig, force bool, kubeconfigPath string) error
 		}
 	}
 
-	// 3. Stop mutagen sync
+	// 3. Stop file sync
 	if session.Sync.Enabled && session.Sync.MutagenSession != "" {
 		fmt.Println("⏳ Stopping file sync...")
-		syncMgr := sync.NewMutagenManager()
+		syncMgr := sync.NewSyncManager()
 		if syncErr := syncMgr.Stop(ctx, session.Sync.MutagenSession); syncErr != nil {
 			fmt.Printf("⚠️  Warning: Failed to stop sync: %v\n", syncErr)
 		} else {

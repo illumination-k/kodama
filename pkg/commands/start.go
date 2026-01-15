@@ -185,28 +185,20 @@ func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, 
 	}
 	fmt.Println("✓ Pod is ready")
 
-	// 11. Start mutagen sync (if enabled)
+	// 11. Perform initial sync (if enabled)
 	if syncEnabled {
-		fmt.Printf("⏳ Starting file sync: %s ⇄ pod...\n", resolvedSyncPath)
+		fmt.Printf("⏳ Performing initial sync: %s → pod...\n", resolvedSyncPath)
 
-		syncMgr := sync.NewMutagenManager()
+		syncMgr := sync.NewSyncManager()
 
-		// Check mutagen is installed
-		if err := syncMgr.CheckInstallation(ctx); err != nil {
-			fmt.Printf("⚠️  Warning: %v\n", err)
-			fmt.Println("   Continuing without sync. Install mutagen to enable file synchronization.")
+		// Perform one-time sync
+		if err := syncMgr.InitialSync(ctx, resolvedSyncPath, namespace, session.PodName); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to sync: %v\n", err)
+			fmt.Println("   Continuing without sync.")
 			session.Sync.Enabled = false
 		} else {
-			mutagenSessionName := fmt.Sprintf("kodama-%s", name)
-
-			if err := syncMgr.Start(ctx, mutagenSessionName, resolvedSyncPath, namespace, session.PodName); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to start sync: %v\n", err)
-				fmt.Println("   Continuing without sync. Check mutagen installation and try again.")
-				session.Sync.Enabled = false
-			} else {
-				session.Sync.MutagenSession = mutagenSessionName
-				fmt.Println("✓ File sync started")
-			}
+			fmt.Println("✓ Initial sync completed")
+			fmt.Println("   Tip: Use 'kubectl kodama attach --sync' for live sync during development")
 		}
 	}
 

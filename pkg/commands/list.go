@@ -25,7 +25,7 @@ func NewListCommand() *cobra.Command {
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
-			return runList(allNamespaces, outputFormat, kubeconfigPath)
+			return runList(outputFormat, kubeconfigPath)
 		},
 	}
 
@@ -35,7 +35,7 @@ func NewListCommand() *cobra.Command {
 	return cmd
 }
 
-func runList(allNamespaces bool, outputFormat string, kubeconfigPath string) error {
+func runList(outputFormat, kubeconfigPath string) error {
 	ctx := context.Background()
 
 	// 1. Load sessions from ~/.kodama/sessions/
@@ -63,7 +63,7 @@ func runList(allNamespaces bool, outputFormat string, kubeconfigPath string) err
 	}
 
 	// 3. Create sync manager for checking sync status
-	syncMgr := sync.NewMutagenManager()
+	syncMgr := sync.NewSyncManager()
 
 	// 4. Enrich sessions with actual pod and sync status
 	for _, session := range sessions {
@@ -164,17 +164,18 @@ func outputJSON(sessions []*config.SessionConfig) error {
 }
 
 func formatDuration(d time.Duration) string {
-	if d < time.Minute {
+	switch {
+	case d < time.Minute:
 		return fmt.Sprintf("%ds", int(d.Seconds()))
-	} else if d < time.Hour {
+	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
-	} else if d < 24*time.Hour {
+	case d < 24*time.Hour:
 		return fmt.Sprintf("%dh", int(d.Hours()))
-	} else if d < 7*24*time.Hour {
+	case d < 7*24*time.Hour:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
-	} else if d < 30*24*time.Hour {
+	case d < 30*24*time.Hour:
 		return fmt.Sprintf("%dw", int(d.Hours()/(24*7)))
-	} else {
+	default:
 		return fmt.Sprintf("%dmo", int(d.Hours()/(24*30)))
 	}
 }
