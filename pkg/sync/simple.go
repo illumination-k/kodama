@@ -68,7 +68,6 @@ func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, n
 	// Create exclude manager
 	var excludeMgr *exclude.Manager
 	if excludeCfg != nil {
-		var err error
 		excludeMgr, err = exclude.NewManager(*excludeCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create exclude manager: %w", err)

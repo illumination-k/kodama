@@ -7,11 +7,8 @@ import (
 
 // MockExecutor is a mock implementation of CommandExecutor for testing
 type MockExecutor struct {
-	// Commands stores the commands that were executed
-	Commands []MockCommand
-
-	// Responses maps command prefixes to their responses
 	Responses map[string]MockResponse
+	Commands  []MockCommand
 }
 
 // MockCommand represents a recorded command execution
@@ -23,9 +20,9 @@ type MockCommand struct {
 
 // MockResponse represents a mock response for a command
 type MockResponse struct {
+	Error  error
 	Stdout string
 	Stderr string
-	Error  error
 }
 
 // NewMockExecutor creates a new MockExecutor
@@ -58,7 +55,7 @@ func (m *MockExecutor) ExecInPod(ctx context.Context, namespace, podName string,
 }
 
 // SetResponse configures a mock response for commands starting with prefix
-func (m *MockExecutor) SetResponse(prefix string, stdout, stderr string, err error) {
+func (m *MockExecutor) SetResponse(prefix, stdout, stderr string, err error) {
 	m.Responses[prefix] = MockResponse{
 		Stdout: stdout,
 		Stderr: stderr,

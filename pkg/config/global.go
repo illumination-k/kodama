@@ -3,8 +3,8 @@ package config
 // GlobalConfig represents global configuration for Kodama
 type GlobalConfig struct {
 	Defaults DefaultsConfig   `yaml:"defaults"`
-	Git      GitConfig        `yaml:"git,omitempty"`
 	Sync     GlobalSyncConfig `yaml:"sync,omitempty"`
+	Git      GitConfig        `yaml:"git,omitempty"`
 }
 
 // DefaultsConfig holds default values for session creation
@@ -29,11 +29,8 @@ type GitConfig struct {
 
 // GlobalSyncConfig holds global sync-related configuration
 type GlobalSyncConfig struct {
-	// Exclude patterns (gitignore syntax)
-	Exclude []string `yaml:"exclude,omitempty"`
-
-	// UseGitignore enables automatic .gitignore loading (default: true)
-	UseGitignore *bool `yaml:"useGitignore,omitempty"`
+	UseGitignore *bool    `yaml:"useGitignore,omitempty"`
+	Exclude      []string `yaml:"exclude,omitempty"`
 }
 
 // DefaultGlobalConfig returns a GlobalConfig with sensible defaults

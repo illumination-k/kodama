@@ -50,11 +50,11 @@ type SessionConfig struct {
 
 // SyncConfig holds configuration for file synchronization
 type SyncConfig struct {
+	UseGitignore   *bool    `yaml:"useGitignore,omitempty"`
 	LocalPath      string   `yaml:"localPath,omitempty"`
 	MutagenSession string   `yaml:"mutagenSession,omitempty"`
-	Enabled        bool     `yaml:"enabled"`
 	Exclude        []string `yaml:"exclude,omitempty"`
-	UseGitignore   *bool    `yaml:"useGitignore,omitempty"`
+	Enabled        bool     `yaml:"enabled"`
 }
 
 // ResourceConfig holds resource limit configuration

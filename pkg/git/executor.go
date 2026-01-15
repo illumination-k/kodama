@@ -26,6 +26,7 @@ func (k *KubectlExecutor) ExecInPod(ctx context.Context, namespace, podName stri
 	args := []string{"exec", "-n", namespace, podName, "--"}
 	args = append(args, command...)
 
+	//#nosec G204 -- kubectl is a known command, args are controlled
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 
 	var stdout, stderr bytes.Buffer

@@ -20,9 +20,3 @@ mise install
 
 # スクリプトはbashで実行されるため、常にbash用のactivateを使用
 eval "$(~/.local/bin/mise activate bash)"
-
-pnpm install
-
-if [ "${CLAUDE_CODE_REMOTE:-}" == "true" ]; then
-	docker compose up -d
-fi

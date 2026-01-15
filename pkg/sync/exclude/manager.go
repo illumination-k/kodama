@@ -10,14 +10,9 @@ import (
 
 // Manager handles exclude pattern matching for file sync
 type Manager struct {
-	// Compiled patterns from config
-	configPatterns []string
-
-	// Gitignore matcher (nil if disabled)
 	gitignoreMatcher *ignore.GitIgnore
-
-	// Base path for relative path resolution
-	basePath string
+	basePath         string
+	configPatterns   []string
 }
 
 // Config holds configuration for the exclude manager

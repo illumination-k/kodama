@@ -107,7 +107,7 @@ func TestNewManager_WithoutGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	cfg := Config{
 		BasePath:     tmpDir,
@@ -131,12 +131,13 @@ func TestNewManager_WithGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Write .gitignore
 	gitignorePath := filepath.Join(tmpDir, ".gitignore")
 	gitignoreContent := "*.log\nnode_modules/\n"
-	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
+	err = os.WriteFile(gitignorePath, []byte(gitignoreContent), 0o600)
+	if err != nil {
 		t.Fatalf("Failed to write .gitignore: %v", err)
 	}
 
@@ -173,12 +174,13 @@ func TestNewManager_GitignoreDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Write .gitignore
 	gitignorePath := filepath.Join(tmpDir, ".gitignore")
 	gitignoreContent := "*.log\n"
-	if err := os.WriteFile(gitignorePath, []byte(gitignoreContent), 0644); err != nil {
+	err = os.WriteFile(gitignorePath, []byte(gitignoreContent), 0o600)
+	if err != nil {
 		t.Fatalf("Failed to write .gitignore: %v", err)
 	}
 

@@ -281,7 +281,7 @@ func buildExcludeConfig(localPath string, globalCfg *config.GlobalConfig, sessio
 	}
 
 	// Merge patterns: session overrides global
-	patterns := []string{}
+	var patterns []string
 
 	if len(sessionCfg.Sync.Exclude) > 0 {
 		// Session patterns completely replace global patterns
