@@ -11,6 +11,7 @@ shellcheck = "0.10.0" # need for actionlint
 "pipx:zizmor" = "1.9.0"
 "aqua:suzuki-shunsuke/ghalint" = "1.4.1"
 "aqua:suzuki-shunsuke/pinact" = "3.3.0"
+prek = "latest"
 
 [tasks.fmt]
 description = "Format (dprint + golangci-lint: gofumpt/goimports)"
@@ -42,3 +43,28 @@ depends = "lint:*"
 [tasks.test]
 description = "Test (go test)"
 run = "go test ./..."
+
+[tasks.build]
+description = "Build kubectl-kodama binary"
+run = "go build -o bin/kubectl-kodama ./cmd/kubectl-kodama"
+
+[tasks.install]
+description = "Install kubectl-kodama to /usr/local/bin"
+depends = ["build"]
+run = "cp bin/kubectl-kodama /usr/local/bin/"
+
+[tasks.dev-install]
+description = "Install kubectl-kodama to ~/.local/bin for development"
+depends = ["build"]
+run = [
+  "mkdir -p $HOME/.local/bin",
+  "cp bin/kubectl-kodama $HOME/.local/bin/",
+]
+
+[tasks.clean]
+description = "Remove build artifacts"
+run = "rm -rf bin/"
+
+[tasks.coverage]
+description = "Run tests with coverage report"
+run = "go test -cover ./..."
