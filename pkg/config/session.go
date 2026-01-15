@@ -31,21 +31,29 @@ const (
 //
 //nolint:govet // fieldalignment: accepting minor memory overhead for logical field grouping
 type SessionConfig struct {
-	CreatedAt     time.Time      `yaml:"createdAt"`
-	UpdatedAt     time.Time      `yaml:"updatedAt"`
-	Sync          SyncConfig     `yaml:"sync,omitempty"`
-	Resources     ResourceConfig `yaml:"resources,omitempty"`
-	Name          string         `yaml:"name"`
-	Namespace     string         `yaml:"namespace"`
-	Repo          string         `yaml:"repo"`
-	Branch        string         `yaml:"branch"`
-	BaseBranch    string         `yaml:"baseBranch,omitempty"`
-	PodName       string         `yaml:"podName"`
-	WorkspacePVC  string         `yaml:"workspacePVC"`
-	ClaudeHomePVC string         `yaml:"claudeHomePVC"`
-	CommitHash    string         `yaml:"commitHash,omitempty"`
-	Status        SessionStatus  `yaml:"status"`
-	AutoBranch    bool           `yaml:"autoBranch,omitempty"`
+	CreatedAt     time.Time           `yaml:"createdAt"`
+	UpdatedAt     time.Time           `yaml:"updatedAt"`
+	Sync          SyncConfig          `yaml:"sync,omitempty"`
+	Resources     ResourceConfig      `yaml:"resources,omitempty"`
+	Name          string              `yaml:"name"`
+	Namespace     string              `yaml:"namespace"`
+	Repo          string              `yaml:"repo"`
+	Branch        string              `yaml:"branch"`
+	BaseBranch    string              `yaml:"baseBranch,omitempty"`
+	PodName       string              `yaml:"podName"`
+	WorkspacePVC  string              `yaml:"workspacePVC"`
+	ClaudeHomePVC string              `yaml:"claudeHomePVC"`
+	CommitHash    string              `yaml:"commitHash,omitempty"`
+	Status        SessionStatus       `yaml:"status"`
+	AutoBranch    bool                `yaml:"autoBranch,omitempty"`
+	ClaudeAuth    *ClaudeAuthOverride `yaml:"claudeAuth,omitempty"`
+}
+
+// ClaudeAuthOverride allows per-session authentication overrides
+type ClaudeAuthOverride struct {
+	AuthType   string `yaml:"authType,omitempty"`   // Override global auth type
+	SecretName string `yaml:"secretName,omitempty"` // Override secret name
+	Profile    string `yaml:"profile,omitempty"`    // Override file auth profile
 }
 
 // SyncConfig holds configuration for file synchronization

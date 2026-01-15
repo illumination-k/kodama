@@ -57,7 +57,7 @@ func TestReadPromptFromFile_Success(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "prompt.txt")
 	content := "This is a test prompt from file"
 
-	err := os.WriteFile(filePath, []byte(content), 0o644)
+	err := os.WriteFile(filePath, []byte(content), 0o600)
 	require.NoError(t, err)
 
 	// Read prompt
@@ -79,7 +79,7 @@ func TestReadPromptFromFile_EmptyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "empty.txt")
 
-	err := os.WriteFile(filePath, []byte(""), 0o644)
+	err := os.WriteFile(filePath, []byte(""), 0o600)
 	require.NoError(t, err)
 
 	prompt, err := ReadPromptFromFile(filePath)
@@ -137,7 +137,7 @@ func TestReadPromptFromFile_MultilineContent(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "multiline.txt")
 	content := "Line 1\nLine 2\nLine 3"
 
-	err := os.WriteFile(filePath, []byte(content), 0o644)
+	err := os.WriteFile(filePath, []byte(content), 0o600)
 	require.NoError(t, err)
 
 	prompt, err := ReadPromptFromFile(filePath)

@@ -32,7 +32,7 @@ func ReadPromptFromFile(filePath string) (string, error) {
 		return "", fmt.Errorf("file path cannot be empty")
 	}
 
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304
 	if err != nil {
 		return "", fmt.Errorf("failed to read prompt file '%s': %w", filePath, err)
 	}
