@@ -71,9 +71,7 @@ func (s *SessionConfig) Validate() error {
 	if s.Namespace == "" {
 		return ErrNamespaceRequired
 	}
-	if s.Repo == "" {
-		return ErrRepoRequired
-	}
+	// Repo is now optional (not required when using sync)
 	return nil
 }
 

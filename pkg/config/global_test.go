@@ -11,7 +11,7 @@ func TestDefaultGlobalConfig(t *testing.T) {
 
 	assert.NotNil(t, config)
 	assert.Equal(t, "default", config.Defaults.Namespace)
-	assert.Equal(t, "ghcr.io/illumination-k/kodama-claude:latest", config.Defaults.Image)
+	assert.Equal(t, "ghcr.io/illumination-k/kodama:latest", config.Defaults.Image)
 	assert.Equal(t, "1", config.Defaults.Resources.CPU)
 	assert.Equal(t, "2Gi", config.Defaults.Resources.Memory)
 	assert.Equal(t, "10Gi", config.Defaults.Storage.Workspace)
@@ -73,7 +73,7 @@ func TestGlobalConfig_MergePartial(t *testing.T) {
 	assert.Equal(t, "2", base.Defaults.Resources.CPU)
 
 	// Non-overridden fields keep defaults
-	assert.Equal(t, "ghcr.io/illumination-k/kodama-claude:latest", base.Defaults.Image)
+	assert.Equal(t, "ghcr.io/illumination-k/kodama:latest", base.Defaults.Image)
 	assert.Equal(t, "2Gi", base.Defaults.Resources.Memory)
 	assert.Equal(t, "10Gi", base.Defaults.Storage.Workspace)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/illumination-k/kodama/pkg/config"
+	"github.com/illumination-k/kodama/pkg/git"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/illumination-k/kodama/pkg/sync"
 	"github.com/illumination-k/kodama/pkg/sync/exclude"
@@ -21,6 +22,7 @@ func NewStartCommand() *cobra.Command {
 		namespace string
 		cpu       string
 		memory    string
+		branch    string
 		noSync    bool
 	)
 
@@ -38,22 +40,23 @@ Examples:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
-			return runStart(args[0], repo, syncPath, namespace, cpu, memory, noSync, kubeconfigPath)
+			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, noSync, kubeconfigPath)
 		},
 	}
 
 	// Flags
-	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL (for future use)")
+	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL to clone (use with --no-sync)")
 	cmd.Flags().StringVar(&syncPath, "sync", "", "Local path to sync (default: current directory)")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace")
 	cmd.Flags().StringVar(&cpu, "cpu", "", "CPU limit (e.g., '1', '2')")
 	cmd.Flags().StringVar(&memory, "memory", "", "Memory limit (e.g., '2Gi', '4Gi')")
+	cmd.Flags().StringVar(&branch, "branch", "", "Git branch to clone (default: repository default branch)")
 	cmd.Flags().BoolVar(&noSync, "no-sync", false, "Disable file synchronization")
 
 	return cmd
 }
 
-func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, kubeconfigPath string) error {
+func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath string) error {
 	ctx := context.Background()
 
 	// 1. Load global config for defaults
@@ -111,6 +114,11 @@ func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, 
 		}
 	}
 
+	// 5. Validate that either sync or repo is provided
+	if !syncEnabled && repo == "" {
+		return fmt.Errorf("either --sync or --repo must be specified. Use --sync to sync local files, or --repo to clone a git repository")
+	}
+
 	// 5. Create session config
 	now := time.Now()
 	session := &config.SessionConfig{
@@ -161,12 +169,13 @@ func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, 
 	// 9. Create pod
 	fmt.Println("⏳ Creating pod...")
 	podSpec := &kubernetes.PodSpec{
-		Name:        session.PodName,
-		Namespace:   namespace,
-		Image:       globalConfig.Defaults.Image,
-		CPULimit:    cpu,
-		MemoryLimit: memory,
-		Command:     []string{"sleep", "infinity"},
+		Name:          session.PodName,
+		Namespace:     namespace,
+		Image:         globalConfig.Defaults.Image,
+		CPULimit:      cpu,
+		MemoryLimit:   memory,
+		GitSecretName: globalConfig.Git.SecretName,
+		Command:       []string{"sleep", "infinity"},
 	}
 
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {
@@ -186,7 +195,36 @@ func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, 
 	}
 	fmt.Println("✓ Pod is ready")
 
-	// 11. Perform initial sync (if enabled)
+	// 11. Clone git repository (if repo is specified and sync is disabled)
+	if !syncEnabled && repo != "" {
+		fmt.Printf("⏳ Cloning repository: %s...\n", repo)
+
+		gitMgr := git.NewGitManager()
+
+		// Get GitHub token from environment or global config
+		token := os.Getenv("GITHUB_TOKEN")
+		// Note: if globalConfig.Git.SecretName is set, token is available in pod via GH_TOKEN env var
+		// The git clone command will use the token injected in the URL
+
+		if err := gitMgr.Clone(ctx, namespace, session.PodName, repo, branch, token); err != nil {
+			session.UpdateStatus(config.StatusFailed)
+			_ = store.SaveSession(session)
+			return fmt.Errorf("failed to clone repository: %w\n\nTroubleshooting:\n  - Verify repository URL is correct\n  - Check authentication if private repo (use GITHUB_TOKEN env var or configure git.secretName in ~/.kodama/config.yaml)\n  - Ensure pod has network access\n  - View logs: kubectl logs %s -n %s\n\nCleanup: kubectl kodama delete %s",
+				err, session.PodName, namespace, name)
+		}
+
+		fmt.Println("✓ Repository cloned")
+
+		// Store git metadata in session
+		session.Repo = repo
+		session.Branch = branch
+		currentCommit, commitErr := gitMgr.GetCurrentCommit(ctx, namespace, session.PodName)
+		if commitErr == nil {
+			session.CommitHash = currentCommit
+		}
+	}
+
+	// 12. Perform initial sync (if enabled)
 	if syncEnabled {
 		fmt.Printf("⏳ Performing initial sync: %s → pod...\n", resolvedSyncPath)
 

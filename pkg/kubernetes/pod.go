@@ -37,6 +37,23 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		},
 	}
 
+	// Add git secret as environment variable if specified
+	if spec.GitSecretName != "" {
+		pod.Spec.Containers[0].Env = []corev1.EnvVar{
+			{
+				Name: "GH_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: spec.GitSecretName,
+						},
+						Key: "token",
+					},
+				},
+			},
+		}
+	}
+
 	// Add volume mounts if PVCs are specified (for future use)
 	if spec.WorkspacePVC != "" || spec.ClaudeHomePVC != "" {
 		volumes := []corev1.Volume{}

@@ -42,7 +42,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		Defaults: DefaultsConfig{
 			Namespace: "default",
-			Image:     "ghcr.io/illumination-k/kodama-claude:latest",
+			Image:     "ghcr.io/illumination-k/kodama:latest",
 			Resources: ResourceConfig{
 				CPU:    "1",
 				Memory: "2Gi",
