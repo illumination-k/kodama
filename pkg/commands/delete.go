@@ -106,6 +106,14 @@ func runDelete(name string, keepConfig, force bool, kubeconfigPath string) error
 		} else {
 			fmt.Println("✓ Pod deleted")
 		}
+
+		// Delete editor config ConfigMap
+		configMapName := fmt.Sprintf("kodama-editor-config-%s", name)
+		if err := k8sClient.DeleteEditorConfigMap(ctx, session.Namespace, configMapName); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to delete editor config ConfigMap: %v\n", err)
+		} else {
+			fmt.Println("✓ Editor config deleted")
+		}
 	}
 
 	// 5. Delete session config (unless --keep-config)

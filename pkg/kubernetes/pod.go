@@ -94,6 +94,30 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 			})
 		}
 
+		// Add editor config ConfigMap if specified
+		if spec.EditorConfigMapName != "" {
+			volumes = append(volumes, corev1.Volume{
+				Name: "editor-config",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: spec.EditorConfigMapName,
+						},
+						Items: []corev1.KeyToPath{
+							{Key: "helix-config.toml", Path: "helix/config.toml"},
+							{Key: "helix-languages.toml", Path: "helix/languages.toml"},
+							{Key: "zellij-config.kdl", Path: "zellij/config.kdl"},
+						},
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "editor-config",
+				MountPath: "/root/.config",
+				ReadOnly:  true,
+			})
+		}
+
 		pod.Spec.Volumes = volumes
 		pod.Spec.Containers[0].VolumeMounts = volumeMounts
 	}

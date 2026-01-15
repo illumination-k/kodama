@@ -177,16 +177,32 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	// Progress indicator
 	fmt.Printf("Creating session '%s'...\n", name)
 
-	// 9. Create pod
+	// 9. Create editor configuration ConfigMap
+	fmt.Println("⏳ Creating editor configuration...")
+	configMapName := fmt.Sprintf("kodama-editor-config-%s", name)
+	configPath := ""
+	if syncEnabled && resolvedSyncPath != "" {
+		configPath = resolvedSyncPath
+	}
+
+	if err := k8sClient.CreateEditorConfigMap(ctx, namespace, configMapName, configPath); err != nil {
+		session.UpdateStatus(config.StatusFailed)
+		_ = store.SaveSession(session)
+		return fmt.Errorf("failed to create editor configuration: %w\n\nCleanup: kubectl kodama delete %s", err, name)
+	}
+	fmt.Println("✓ Editor configuration created")
+
+	// 10. Create pod
 	fmt.Println("⏳ Creating pod...")
 	podSpec := &kubernetes.PodSpec{
-		Name:          session.PodName,
-		Namespace:     namespace,
-		Image:         globalConfig.Defaults.Image,
-		CPULimit:      cpu,
-		MemoryLimit:   memory,
-		GitSecretName: globalConfig.Git.SecretName,
-		Command:       []string{"sleep", "infinity"},
+		Name:                session.PodName,
+		Namespace:           namespace,
+		Image:               globalConfig.Defaults.Image,
+		CPULimit:            cpu,
+		MemoryLimit:         memory,
+		GitSecretName:       globalConfig.Git.SecretName,
+		EditorConfigMapName: configMapName,
+		Command:             []string{"sleep", "infinity"},
 	}
 
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {

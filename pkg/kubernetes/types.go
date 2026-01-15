@@ -35,6 +35,9 @@ type PodSpec struct {
 	ClaudeSecretKey  string            // Key in secret (default: "token")
 	ClaudeAuthFile   string            // Path to auth file (for file auth)
 	ClaudeEnvVars    map[string]string // Additional env vars for auth
+
+	// Editor configuration
+	EditorConfigMapName string // ConfigMap name for editor configs (Helix, Zellij)
 }
 
 // PVCSpec contains specifications for creating a PersistentVolumeClaim
