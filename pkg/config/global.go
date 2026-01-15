@@ -2,8 +2,9 @@ package config
 
 // GlobalConfig represents global configuration for Kodama
 type GlobalConfig struct {
-	Defaults DefaultsConfig `yaml:"defaults"`
-	Git      GitConfig      `yaml:"git,omitempty"`
+	Defaults DefaultsConfig   `yaml:"defaults"`
+	Git      GitConfig        `yaml:"git,omitempty"`
+	Sync     GlobalSyncConfig `yaml:"sync,omitempty"`
 }
 
 // DefaultsConfig holds default values for session creation
@@ -26,8 +27,18 @@ type GitConfig struct {
 	SecretName string `yaml:"secretName,omitempty"`
 }
 
+// GlobalSyncConfig holds global sync-related configuration
+type GlobalSyncConfig struct {
+	// Exclude patterns (gitignore syntax)
+	Exclude []string `yaml:"exclude,omitempty"`
+
+	// UseGitignore enables automatic .gitignore loading (default: true)
+	UseGitignore *bool `yaml:"useGitignore,omitempty"`
+}
+
 // DefaultGlobalConfig returns a GlobalConfig with sensible defaults
 func DefaultGlobalConfig() *GlobalConfig {
+	useGitignore := true
 	return &GlobalConfig{
 		Defaults: DefaultsConfig{
 			Namespace: "default",
@@ -41,6 +52,10 @@ func DefaultGlobalConfig() *GlobalConfig {
 				ClaudeHome: "1Gi",
 			},
 			BranchPrefix: "kodama/",
+		},
+		Sync: GlobalSyncConfig{
+			Exclude:      []string{}, // No default excludes
+			UseGitignore: &useGitignore,
 		},
 	}
 }
@@ -70,5 +85,12 @@ func (g *GlobalConfig) Merge(other *GlobalConfig) {
 	}
 	if other.Git.SecretName != "" {
 		g.Git.SecretName = other.Git.SecretName
+	}
+	// Merge sync config
+	if len(other.Sync.Exclude) > 0 {
+		g.Sync.Exclude = other.Sync.Exclude
+	}
+	if other.Sync.UseGitignore != nil {
+		g.Sync.UseGitignore = other.Sync.UseGitignore
 	}
 }

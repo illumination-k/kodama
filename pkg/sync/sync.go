@@ -3,15 +3,17 @@ package sync
 import (
 	"context"
 	"time"
+
+	"github.com/illumination-k/kodama/pkg/sync/exclude"
 )
 
 // SyncManager provides interface for managing file synchronization sessions
 type SyncManager interface {
 	// InitialSync performs one-time sync from local to pod
-	InitialSync(ctx context.Context, localPath, namespace, podName string) error
+	InitialSync(ctx context.Context, localPath, namespace, podName string, excludeCfg *exclude.Config) error
 
 	// Start creates a continuous sync session (for attach --sync)
-	Start(ctx context.Context, sessionName, localPath, namespace, podName string) error
+	Start(ctx context.Context, sessionName, localPath, namespace, podName string, excludeCfg *exclude.Config) error
 
 	// Stop terminates a sync session
 	Stop(ctx context.Context, sessionName string) error

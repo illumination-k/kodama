@@ -9,6 +9,7 @@ import (
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/illumination-k/kodama/pkg/sync"
+	"github.com/illumination-k/kodama/pkg/sync/exclude"
 	"github.com/spf13/cobra"
 )
 
@@ -191,8 +192,11 @@ func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, 
 
 		syncMgr := sync.NewSyncManager()
 
+		// Build exclude config
+		excludeCfg := buildExcludeConfig(resolvedSyncPath, globalConfig, session)
+
 		// Perform one-time sync
-		if err := syncMgr.InitialSync(ctx, resolvedSyncPath, namespace, session.PodName); err != nil {
+		if err := syncMgr.InitialSync(ctx, resolvedSyncPath, namespace, session.PodName, excludeCfg); err != nil {
 			fmt.Printf("⚠️  Warning: Failed to sync: %v\n", err)
 			fmt.Println("   Continuing without sync.")
 			session.Sync.Enabled = false
@@ -221,4 +225,37 @@ func runStart(name, repo, syncPath, namespace, cpu, memory string, noSync bool, 
 	}
 
 	return nil
+}
+
+// buildExcludeConfig creates exclude.Config from global and session configs
+func buildExcludeConfig(localPath string, globalCfg *config.GlobalConfig, sessionCfg *config.SessionConfig) *exclude.Config {
+	// Determine if gitignore should be used
+	useGitignore := true // default
+
+	// Global config override
+	if globalCfg.Sync.UseGitignore != nil {
+		useGitignore = *globalCfg.Sync.UseGitignore
+	}
+
+	// Session config override (highest priority)
+	if sessionCfg.Sync.UseGitignore != nil {
+		useGitignore = *sessionCfg.Sync.UseGitignore
+	}
+
+	// Merge patterns: session overrides global
+	patterns := []string{}
+
+	if len(sessionCfg.Sync.Exclude) > 0 {
+		// Session patterns completely replace global patterns
+		patterns = sessionCfg.Sync.Exclude
+	} else {
+		// Use global patterns
+		patterns = globalCfg.Sync.Exclude
+	}
+
+	return &exclude.Config{
+		BasePath:     localPath,
+		Patterns:     patterns,
+		UseGitignore: useGitignore,
+	}
 }

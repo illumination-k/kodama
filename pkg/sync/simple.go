@@ -6,16 +6,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/illumination-k/kodama/pkg/sync/exclude"
 )
 
 // simpleSyncManager implements SyncManager interface using fsnotify + kubectl cp
 type simpleSyncManager struct {
-	watchers map[string]*fsnotify.Watcher
-	stopChan map[string]chan struct{}
+	watchers        map[string]*fsnotify.Watcher
+	stopChan        map[string]chan struct{}
+	excludeManagers map[string]*exclude.Manager
 }
 
 // Compile-time check that simpleSyncManager implements SyncManager
@@ -24,13 +25,14 @@ var _ SyncManager = (*simpleSyncManager)(nil)
 // NewSimpleSyncManager creates a new SyncManager instance using simple sync
 func NewSimpleSyncManager() SyncManager {
 	return &simpleSyncManager{
-		watchers: make(map[string]*fsnotify.Watcher),
-		stopChan: make(map[string]chan struct{}),
+		watchers:        make(map[string]*fsnotify.Watcher),
+		stopChan:        make(map[string]chan struct{}),
+		excludeManagers: make(map[string]*exclude.Manager),
 	}
 }
 
 // InitialSync performs one-time sync from local to pod
-func (s *simpleSyncManager) InitialSync(ctx context.Context, localPath, namespace, podName string) error {
+func (s *simpleSyncManager) InitialSync(ctx context.Context, localPath, namespace, podName string, excludeCfg *exclude.Config) error {
 	// Resolve absolute path
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
@@ -42,11 +44,11 @@ func (s *simpleSyncManager) InitialSync(ctx context.Context, localPath, namespac
 		return fmt.Errorf("local path does not exist: %w", err)
 	}
 
-	return s.initialSync(ctx, absPath, namespace, podName)
+	return s.initialSync(ctx, absPath, namespace, podName, excludeCfg)
 }
 
 // Start creates a new sync session using kubectl cp and fsnotify
-func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, namespace, podName string) error {
+func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, namespace, podName string, excludeCfg *exclude.Config) error {
 	// Check if session already exists
 	if _, exists := s.watchers[sessionName]; exists {
 		return fmt.Errorf("sync session '%s' already exists", sessionName)
@@ -63,9 +65,21 @@ func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, n
 		return fmt.Errorf("local path does not exist: %w", statErr)
 	}
 
+	// Create exclude manager
+	var excludeMgr *exclude.Manager
+	if excludeCfg != nil {
+		var err error
+		excludeMgr, err = exclude.NewManager(*excludeCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create exclude manager: %w", err)
+		}
+		// Store exclude manager for this session
+		s.excludeManagers[sessionName] = excludeMgr
+	}
+
 	// Initial sync: copy all files to pod
 	fmt.Println("🔄 Performing initial sync...")
-	if syncErr := s.initialSync(ctx, absPath, namespace, podName); syncErr != nil {
+	if syncErr := s.initialSync(ctx, absPath, namespace, podName, excludeCfg); syncErr != nil {
 		return fmt.Errorf("initial sync failed: %w", syncErr)
 	}
 	fmt.Println("✓ Initial sync completed")
@@ -77,7 +91,7 @@ func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, n
 	}
 
 	// Add directory to watcher (recursively)
-	if err := s.addDirRecursive(watcher, absPath); err != nil {
+	if err := s.addDirRecursive(watcher, absPath, excludeMgr); err != nil {
 		_ = watcher.Close()
 		return fmt.Errorf("failed to watch directory: %w", err)
 	}
@@ -90,25 +104,36 @@ func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, n
 	s.stopChan[sessionName] = stopChan
 
 	// Start watching in background
-	go s.watchFiles(ctx, absPath, namespace, podName, watcher, stopChan)
+	go s.watchFiles(ctx, absPath, namespace, podName, watcher, stopChan, excludeMgr)
 
 	return nil
 }
 
 // initialSync performs initial sync of all files
-func (s *simpleSyncManager) initialSync(ctx context.Context, localPath, namespace, podName string) error {
+func (s *simpleSyncManager) initialSync(ctx context.Context, localPath, namespace, podName string, excludeCfg *exclude.Config) error {
 	// Use tar + kubectl exec for efficient initial sync
 	remotePath := "/workspace"
 
-	// Create tar archive excluding common ignore patterns
-	tarCmd := exec.CommandContext(ctx, "tar", "czf", "-",
-		"--exclude=.git",
-		"--exclude=node_modules",
-		"--exclude=.kodama",
-		"--exclude=*.log",
-		"-C", localPath,
-		".",
-	)
+	// Build tar command arguments
+	tarArgs := []string{"czf", "-"}
+
+	// Add exclude arguments from config
+	if excludeCfg != nil {
+		excludeMgr, err := exclude.NewManager(*excludeCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create exclude manager: %w", err)
+		}
+		tarArgs = append(tarArgs, excludeMgr.GetTarExcludeArgs()...)
+	} else {
+		// Fallback: always exclude .git as safety measure
+		tarArgs = append(tarArgs, "--exclude=.git")
+	}
+
+	// Add source directory
+	tarArgs = append(tarArgs, "-C", localPath, ".")
+
+	// Create tar archive
+	tarCmd := exec.CommandContext(ctx, "tar", tarArgs...)
 
 	// Pipe to kubectl exec to extract in pod
 	untarCmd := exec.CommandContext(ctx, "kubectl", "exec", "-i",
@@ -148,16 +173,15 @@ func (s *simpleSyncManager) initialSync(ctx context.Context, localPath, namespac
 }
 
 // addDirRecursive adds directory and subdirectories to watcher
-func (s *simpleSyncManager) addDirRecursive(watcher *fsnotify.Watcher, path string) error {
+func (s *simpleSyncManager) addDirRecursive(watcher *fsnotify.Watcher, path string, excludeMgr *exclude.Manager) error {
 	return filepath.Walk(path, func(walkPath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip ignored directories
+		// Check if directory should be excluded
 		if info.IsDir() {
-			base := filepath.Base(walkPath)
-			if base == ".git" || base == "node_modules" || base == ".kodama" {
+			if excludeMgr != nil && excludeMgr.ShouldExcludeDir(walkPath) {
 				return filepath.SkipDir
 			}
 
@@ -169,7 +193,7 @@ func (s *simpleSyncManager) addDirRecursive(watcher *fsnotify.Watcher, path stri
 }
 
 // watchFiles monitors file changes and syncs to pod
-func (s *simpleSyncManager) watchFiles(ctx context.Context, localPath, namespace, podName string, watcher *fsnotify.Watcher, stopChan chan struct{}) {
+func (s *simpleSyncManager) watchFiles(ctx context.Context, localPath, namespace, podName string, watcher *fsnotify.Watcher, stopChan chan struct{}, excludeMgr *exclude.Manager) {
 	// Debounce timer to batch rapid changes
 	var timer *time.Timer
 	pendingFiles := make(map[string]bool)
@@ -236,11 +260,8 @@ func (s *simpleSyncManager) watchFiles(ctx context.Context, localPath, namespace
 
 			// Only handle writes and creates
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
-				// Skip ignored files
-				if strings.Contains(event.Name, ".git/") ||
-					strings.Contains(event.Name, "node_modules/") ||
-					strings.Contains(event.Name, ".kodama/") ||
-					strings.HasSuffix(event.Name, ".log") {
+				// Check if file should be excluded
+				if excludeMgr != nil && excludeMgr.ShouldExclude(event.Name) {
 					continue
 				}
 
@@ -282,7 +303,10 @@ func (s *simpleSyncManager) Stop(ctx context.Context, sessionName string) error 
 		return fmt.Errorf("failed to close watcher: %w", err)
 	}
 
+	// Clean up exclude manager
+	delete(s.excludeManagers, sessionName)
 	delete(s.watchers, sessionName)
+
 	return nil
 }
 
