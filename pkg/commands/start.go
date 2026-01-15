@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/illumination-k/kodama/pkg/agent"
-	"github.com/illumination-k/kodama/pkg/agent/task"
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/git"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
@@ -343,7 +342,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 
 		if promptFile != "" {
 			fmt.Printf("\n⏳ Reading prompt from file: %s\n", promptFile)
-			finalPrompt, promptErr = task.ReadPromptFromFile(promptFile)
+			finalPrompt, promptErr = config.ReadPromptFromFile(promptFile)
 			if promptErr != nil {
 				fmt.Printf("⚠️  Warning: Failed to read prompt file: %v\n", promptErr)
 				fmt.Println("   Session is running. You can manually invoke the agent later.")
@@ -359,13 +358,20 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 			// Create agent executor
 			agentExecutor := agent.NewCodingAgentExecutor()
 
-			// Start the task
+			// Start the agent through session
 			fmt.Println("\n🤖 Initiating coding agent...")
-			if agentErr := task.Start(ctx, agentExecutor, namespace, session.PodName, finalPrompt); agentErr != nil {
+			if agentErr := session.StartAgent(ctx, agentExecutor, finalPrompt); agentErr != nil {
 				// Don't fail the entire start command if agent fails
 				// The session is already created and running
 				fmt.Printf("⚠️  Warning: Failed to start coding agent: %v\n", agentErr)
 				fmt.Println("   Session is running. You can manually invoke the agent later.")
+			} else {
+				fmt.Println("✓ Agent task started")
+			}
+
+			// Save updated session with agent execution record
+			if err := store.SaveSession(session); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to save agent execution record: %v\n", err)
 			}
 		}
 	}

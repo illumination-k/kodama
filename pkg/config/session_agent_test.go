@@ -1,4 +1,4 @@
-package task
+package config
 
 import (
 	"context"
@@ -12,13 +12,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStart_Success(t *testing.T) {
+func TestSessionConfig_StartAgent_Success(t *testing.T) {
 	mock := agent.NewMockCodingAgentExecutor()
 	ctx := context.Background()
 
-	err := Start(ctx, mock, "test-ns", "test-pod", "test prompt")
+	session := &SessionConfig{
+		Name:      "test-session",
+		Namespace: "test-ns",
+		PodName:   "test-pod",
+		Status:    StatusRunning,
+	}
+
+	err := session.StartAgent(ctx, mock, "test prompt")
 
 	require.NoError(t, err)
+	assert.Len(t, session.AgentExecutions, 1)
+	assert.Equal(t, "test prompt", session.AgentExecutions[0].Prompt)
+	assert.Equal(t, "completed", session.AgentExecutions[0].Status)
+	assert.NotNil(t, session.LastAgentRun)
 
 	calls := mock.GetTaskStartCalls()
 	require.Len(t, calls, 1)
@@ -27,28 +38,66 @@ func TestStart_Success(t *testing.T) {
 	assert.Equal(t, "test prompt", calls[0].Prompt)
 }
 
-func TestStart_EmptyPrompt(t *testing.T) {
+func TestSessionConfig_StartAgent_EmptyPrompt(t *testing.T) {
 	mock := agent.NewMockCodingAgentExecutor()
 	ctx := context.Background()
 
-	err := Start(ctx, mock, "test-ns", "test-pod", "")
+	session := &SessionConfig{
+		Name:      "test-session",
+		Namespace: "test-ns",
+		PodName:   "test-pod",
+		Status:    StatusRunning,
+	}
+
+	err := session.StartAgent(ctx, mock, "")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "prompt cannot be empty")
+	assert.Len(t, session.AgentExecutions, 0)
 }
 
-func TestStart_ExecutorError(t *testing.T) {
+func TestSessionConfig_StartAgent_SessionNotRunning(t *testing.T) {
+	mock := agent.NewMockCodingAgentExecutor()
+	ctx := context.Background()
+
+	session := &SessionConfig{
+		Name:      "test-session",
+		Namespace: "test-ns",
+		PodName:   "test-pod",
+		Status:    StatusStopped,
+	}
+
+	err := session.StartAgent(ctx, mock, "test prompt")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "session must be running")
+	assert.Len(t, session.AgentExecutions, 0)
+}
+
+func TestSessionConfig_StartAgent_ExecutorError(t *testing.T) {
 	mock := agent.NewMockCodingAgentExecutor()
 	mock.TaskStartFunc = func(ctx context.Context, namespace, podName, prompt string) (string, error) {
 		return "", fmt.Errorf("executor failed")
 	}
 
 	ctx := context.Background()
-	err := Start(ctx, mock, "test-ns", "test-pod", "test prompt")
+	session := &SessionConfig{
+		Name:      "test-session",
+		Namespace: "test-ns",
+		PodName:   "test-pod",
+		Status:    StatusRunning,
+	}
+
+	err := session.StartAgent(ctx, mock, "test prompt")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to start task")
+	assert.Contains(t, err.Error(), "failed to start agent task")
 	assert.Contains(t, err.Error(), "executor failed")
+
+	// Error should be recorded in execution history
+	assert.Len(t, session.AgentExecutions, 1)
+	assert.Equal(t, "failed", session.AgentExecutions[0].Status)
+	assert.Contains(t, session.AgentExecutions[0].Error, "executor failed")
 }
 
 func TestReadPromptFromFile_Success(t *testing.T) {
@@ -97,6 +146,21 @@ func TestReadPromptFromFile_EmptyPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "file path cannot be empty")
 }
 
+func TestReadPromptFromFile_MultilineContent(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "multiline.txt")
+	content := "Line 1\nLine 2\nLine 3"
+
+	err := os.WriteFile(filePath, []byte(content), 0o600)
+	require.NoError(t, err)
+
+	prompt, err := ReadPromptFromFile(filePath)
+
+	require.NoError(t, err)
+	assert.Equal(t, content, prompt)
+	assert.Contains(t, prompt, "\n")
+}
+
 func TestTruncatePrompt(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -130,19 +194,4 @@ func TestTruncatePrompt(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestReadPromptFromFile_MultilineContent(t *testing.T) {
-	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "multiline.txt")
-	content := "Line 1\nLine 2\nLine 3"
-
-	err := os.WriteFile(filePath, []byte(content), 0o600)
-	require.NoError(t, err)
-
-	prompt, err := ReadPromptFromFile(filePath)
-
-	require.NoError(t, err)
-	assert.Equal(t, content, prompt)
-	assert.Contains(t, prompt, "\n")
 }
