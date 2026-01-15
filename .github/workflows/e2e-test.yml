@@ -95,10 +95,10 @@ jobs:
           echo "Testing: kubectl kodama delete test-session"
           ./kubectl-kodama delete test-session --force
 
+          sleep 3
+
           # Verify pod was deleted (should fail with "not found")
           ! kubectl get pod kodama-test-session -n default 2>/dev/null || exit 1
-
-          sleep 3
 
           # Verify session was removed from list
           ! ./kubectl-kodama list | grep test-session || exit 1
