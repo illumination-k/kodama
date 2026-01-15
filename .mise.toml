@@ -1,0 +1,44 @@
+[tools]
+go = "1.25.5"
+"aqua:golangci/golangci-lint" = "2.7.2"
+dprint = "0.50.0"
+
+# github actions
+actionlint = "1.7.7"
+
+shellcheck = "0.10.0" # need for actionlint
+
+"pipx:zizmor" = "1.9.0"
+"aqua:suzuki-shunsuke/ghalint" = "1.4.1"
+"aqua:suzuki-shunsuke/pinact" = "3.3.0"
+
+[tasks.fmt]
+description = "Format (dprint + golangci-lint: gofumpt/goimports)"
+run = ["dprint fmt", "golangci-lint fmt -c .golangci.yml"]
+
+[tasks."lint:go"]
+description = "Lint (golangci-lint)"
+run = [
+  "golangci-lint config verify -c .golangci.yml",
+  "golangci-lint run ./...",
+]
+
+[tasks.fix]
+description = "Auto-fix (fmt + golangci-lint --fix)"
+depends = ["fmt"]
+run = "golangci-lint run --fix ./..."
+
+[tasks."lint:github"]
+description = "Lint GitHub Actions workflows (actionlint)"
+run = ["actionlint", "zizmor .", "ghalint run", "ghalint act"]
+
+[tasks.pinact]
+description = "Pin GitHub Actions versions to full commit SHAs"
+run = "pinact run"
+
+[tasks."lint"]
+depends = "lint:*"
+
+[tasks.test]
+description = "Test (go test)"
+run = "go test ./..."
