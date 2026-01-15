@@ -9,9 +9,9 @@ import (
 
 func TestSessionConfig_Validate(t *testing.T) {
 	tests := []struct {
-		name    string
-		config  *SessionConfig
 		wantErr error
+		config  *SessionConfig
+		name    string
 	}{
 		{
 			name: "valid config",

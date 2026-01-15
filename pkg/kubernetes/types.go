@@ -41,16 +41,16 @@ type JobSpec struct {
 	Name          string
 	Namespace     string
 	Image         string
-	Command       []string
 	WorkspacePVC  string
 	ClaudeHomePVC string
+	Command       []string
 }
 
 // PodStatus represents the current state of a pod
 type PodStatus struct {
 	Phase      corev1.PodPhase
-	Ready      bool
 	IP         string
 	StartTime  string
 	Conditions []corev1.PodCondition
+	Ready      bool
 }

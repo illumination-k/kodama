@@ -7,16 +7,18 @@ A kubectl plugin for managing Claude Code sessions in Kubernetes.
 Kodama makes it easy to run Claude Code development sessions in isolated Kubernetes environments. It provides a simple CLI interface for managing session lifecycles without requiring cluster admin privileges.
 
 **Key Features:**
+
 - 🚀 Simple kubectl plugin - no CRDs or controllers required
 - 💾 Persistent workspaces across sessions
 - 🔄 Bidirectional file synchronization with mutagen
 - 🌿 Automatic branch creation
 - 🔒 Isolated environments in Kubernetes
-- ⚙️  Easy configuration management
+- ⚙️ Easy configuration management
 
 ## Architecture
 
 Kodama uses a **kubectl plugin approach** (no CRDs/controllers):
+
 - Stores session state locally in `~/.kodama/`
 - Directly manages K8s resources via client-go
 - No admin privileges required
@@ -172,6 +174,7 @@ kodama/
 ## Roadmap
 
 ### ✅ Phase 1: Foundation (Current)
+
 - [x] Go module initialization
 - [x] CLI framework (cobra)
 - [x] Configuration management
@@ -179,12 +182,14 @@ kodama/
 - [x] Build infrastructure
 
 ### 🚧 Phase 2: Session Management (Next)
+
 - [ ] `start` command - Create new sessions
 - [ ] `list` command - List all sessions
 - [ ] `get` command - Show session details
 - [ ] `delete` command - Remove sessions
 
 ### 📅 Phase 3: Advanced Features
+
 - [ ] `stop` / `resume` / `attach` commands
 - [ ] Mutagen sync integration
 - [ ] End-to-end testing
@@ -195,6 +200,7 @@ kodama/
 ### Session Status
 
 Sessions can be in one of these states:
+
 - `Pending` - Session created, not yet started
 - `Starting` - Resources being provisioned
 - `Running` - Session active and ready
@@ -204,6 +210,7 @@ Sessions can be in one of these states:
 ### Resource Configuration
 
 Default resource limits:
+
 ```yaml
 resources:
   cpu: "1"      # CPU limit
@@ -213,6 +220,7 @@ resources:
 ### Storage Configuration
 
 Default storage sizes:
+
 ```yaml
 storage:
   workspace: "10Gi"   # Workspace PVC size

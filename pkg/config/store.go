@@ -10,10 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var (
-	// ErrSessionNotFound is returned when a session config file doesn't exist
-	ErrSessionNotFound = errors.New("session not found")
-)
+// ErrSessionNotFound is returned when a session config file doesn't exist
+var ErrSessionNotFound = errors.New("session not found")
 
 const (
 	// DefaultConfigDir is the default directory for Kodama configuration
@@ -50,13 +48,13 @@ func NewStoreWithPath(configDir string) *Store {
 // EnsureConfigDir creates the configuration directory structure if it doesn't exist
 func (s *Store) EnsureConfigDir() error {
 	// Create main config directory
-	if err := os.MkdirAll(s.configDir, 0755); err != nil {
+	if err := os.MkdirAll(s.configDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
 	// Create sessions subdirectory
 	sessionsDir := filepath.Join(s.configDir, SessionsSubdir)
-	if err := os.MkdirAll(sessionsDir, 0755); err != nil {
+	if err := os.MkdirAll(sessionsDir, 0o750); err != nil {
 		return fmt.Errorf("failed to create sessions directory: %w", err)
 	}
 
@@ -77,6 +75,7 @@ func (s *Store) GetGlobalConfigPath() string {
 func (s *Store) LoadSession(name string) (*SessionConfig, error) {
 	path := s.GetSessionPath(name)
 
+	// #nosec G304 -- path is constructed from validated session name
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -110,7 +109,7 @@ func (s *Store) SaveSession(config *SessionConfig) error {
 		return fmt.Errorf("failed to marshal session config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write session config: %w", err)
 	}
 
@@ -143,7 +142,7 @@ func (s *Store) ListSessions() ([]*SessionConfig, error) {
 		return nil, fmt.Errorf("failed to read sessions directory: %w", err)
 	}
 
-	var sessions []*SessionConfig
+	sessions := make([]*SessionConfig, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -170,6 +169,7 @@ func (s *Store) ListSessions() ([]*SessionConfig, error) {
 func (s *Store) LoadGlobalConfig() (*GlobalConfig, error) {
 	path := s.GetGlobalConfigPath()
 
+	// #nosec G304 -- path is constructed from config directory
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -204,7 +204,7 @@ func (s *Store) SaveGlobalConfig(config *GlobalConfig) error {
 		return fmt.Errorf("failed to marshal global config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write global config: %w", err)
 	}
 

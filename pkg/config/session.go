@@ -28,41 +28,31 @@ const (
 )
 
 // SessionConfig represents a Kodama session configuration
+//
+//nolint:govet // fieldalignment: accepting minor memory overhead for logical field grouping
 type SessionConfig struct {
-	Name      string `yaml:"name"`
-	Namespace string `yaml:"namespace"`
-
-	// Repository configuration
-	Repo       string `yaml:"repo"`
-	Branch     string `yaml:"branch"`
-	BaseBranch string `yaml:"baseBranch,omitempty"`
-	AutoBranch bool   `yaml:"autoBranch,omitempty"`
-
-	// Kubernetes resources
-	PodName       string `yaml:"podName"`
-	WorkspacePVC  string `yaml:"workspacePVC"`
-	ClaudeHomePVC string `yaml:"claudeHomePVC"`
-
-	// Git information
-	CommitHash string `yaml:"commitHash,omitempty"`
-
-	// Sync configuration
-	Sync SyncConfig `yaml:"sync,omitempty"`
-
-	// Session status
-	Status    SessionStatus `yaml:"status"`
-	CreatedAt time.Time     `yaml:"createdAt"`
-	UpdatedAt time.Time     `yaml:"updatedAt"`
-
-	// Resource limits
-	Resources ResourceConfig `yaml:"resources,omitempty"`
+	CreatedAt     time.Time      `yaml:"createdAt"`
+	UpdatedAt     time.Time      `yaml:"updatedAt"`
+	Sync          SyncConfig     `yaml:"sync,omitempty"`
+	Resources     ResourceConfig `yaml:"resources,omitempty"`
+	Name          string         `yaml:"name"`
+	Namespace     string         `yaml:"namespace"`
+	Repo          string         `yaml:"repo"`
+	Branch        string         `yaml:"branch"`
+	BaseBranch    string         `yaml:"baseBranch,omitempty"`
+	PodName       string         `yaml:"podName"`
+	WorkspacePVC  string         `yaml:"workspacePVC"`
+	ClaudeHomePVC string         `yaml:"claudeHomePVC"`
+	CommitHash    string         `yaml:"commitHash,omitempty"`
+	Status        SessionStatus  `yaml:"status"`
+	AutoBranch    bool           `yaml:"autoBranch,omitempty"`
 }
 
 // SyncConfig holds configuration for file synchronization
 type SyncConfig struct {
-	Enabled        bool   `yaml:"enabled"`
 	LocalPath      string `yaml:"localPath,omitempty"`
 	MutagenSession string `yaml:"mutagenSession,omitempty"`
+	Enabled        bool   `yaml:"enabled"`
 }
 
 // ResourceConfig holds resource limit configuration
