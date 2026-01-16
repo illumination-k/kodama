@@ -27,7 +27,7 @@ apt-get update -qq && apt-get install -y -qq curl ca-certificates
 curl -fsSL https://claude.ai/install.sh | bash -s latest
 echo "Copying binaries to /kodama/bin..."
 mkdir -p /kodama/bin
-cp -r /root/.local/bin/* /kodama/bin/
+cp -rL /root/.local/bin/* /kodama/bin/
 echo "Claude Code installation complete"`,
 		},
 		VolumeMounts: []corev1.VolumeMount{
