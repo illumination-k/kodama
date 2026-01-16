@@ -38,6 +38,13 @@ type PodSpec struct {
 
 	// Editor configuration
 	EditorConfigMapName string // ConfigMap name for editor configs (Helix, Zellij)
+
+	// Git repository configuration for workspace-initializer init container
+	GitRepo         string // Git repository URL (empty if no repo)
+	GitBranch       string // Feature branch name to create
+	GitCloneDepth   int    // Clone depth (0 for full clone)
+	GitSingleBranch bool   // Whether to clone single branch only
+	GitCloneArgs    string // Additional git clone arguments
 }
 
 // PVCSpec contains specifications for creating a PersistentVolumeClaim

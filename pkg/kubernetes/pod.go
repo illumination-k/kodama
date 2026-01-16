@@ -5,15 +5,101 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/illumination-k/kodama/pkg/gitcmd"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/utils/ptr"
 )
+
+// createClaudeInstallerInitContainer creates init container for Claude Code installation
+func createClaudeInstallerInitContainer() corev1.Container {
+	return corev1.Container{
+		Name:    "claude-installer",
+		Image:   "ubuntu:24.04",
+		Command: []string{"/bin/bash", "-c"},
+		Args: []string{
+			`set -e
+echo "Installing Claude Code CLI..."
+apt-get update -qq && apt-get install -y -qq curl ca-certificates
+curl -fsSL https://claude.ai/install.sh | bash -s latest
+echo "Copying binaries to shared volume..."
+mkdir -p /claude-bin
+cp -r /root/.local/bin/* /claude-bin/
+echo "Claude Code installation complete"`,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "claude-bin",
+				MountPath: "/claude-bin",
+			},
+		},
+	}
+}
+
+// createWorkspaceInitializerInitContainer creates init container for git operations
+func createWorkspaceInitializerInitContainer(spec *PodSpec) *corev1.Container {
+	// Skip if no repository specified
+	if spec.GitRepo == "" {
+		return nil
+	}
+
+	// Build git clone options from spec
+	opts := &gitcmd.CloneOptions{
+		Depth:        spec.GitCloneDepth,
+		SingleBranch: spec.GitSingleBranch,
+		ExtraArgs:    spec.GitCloneArgs,
+	}
+
+	// Build git initialization script using gitcmd package
+	initScript := gitcmd.BuildGitInitScript(spec.GitRepo, spec.GitBranch, opts)
+
+	container := corev1.Container{
+		Name:    "workspace-initializer",
+		Image:   "ubuntu:24.04",
+		Command: []string{"/bin/bash", "-c"},
+		Args:    []string{initScript},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "workspace",
+				MountPath: "/workspace",
+			},
+		},
+	}
+
+	// Add git token environment variable if available
+	if spec.GitSecretName != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name: "GH_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: spec.GitSecretName,
+					},
+					Key:      "token",
+					Optional: ptr.To(true),
+				},
+			},
+		})
+	}
+
+	return &container
+}
 
 // CreatePod creates a new pod in the cluster
 func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
+	// Build init containers
+	initContainers := []corev1.Container{
+		createClaudeInstallerInitContainer(),
+	}
+
+	// Add workspace initializer if git repo specified
+	if workspaceInit := createWorkspaceInitializerInitContainer(spec); workspaceInit != nil {
+		initContainers = append(initContainers, *workspaceInit)
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      spec.Name,
@@ -24,6 +110,7 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 			},
 		},
 		Spec: corev1.PodSpec{
+			InitContainers: initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:       "claude-code",
@@ -37,21 +124,27 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		},
 	}
 
+	// Add PATH environment variable to include claude-bin
+	pod.Spec.Containers[0].Env = []corev1.EnvVar{
+		{
+			Name:  "PATH",
+			Value: "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		},
+	}
+
 	// Add git secret as environment variable if specified
 	if spec.GitSecretName != "" {
-		pod.Spec.Containers[0].Env = []corev1.EnvVar{
-			{
-				Name: "GH_TOKEN",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: spec.GitSecretName,
-						},
-						Key: "token",
+		pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, corev1.EnvVar{
+			Name: "GH_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: spec.GitSecretName,
 					},
+					Key: "token",
 				},
 			},
-		}
+		})
 	}
 
 	// Add Claude authentication based on auth type
@@ -59,68 +152,92 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		c.injectClaudeAuth(pod, spec)
 	}
 
-	// Add volume mounts if PVCs are specified (for future use)
-	if spec.WorkspacePVC != "" || spec.ClaudeHomePVC != "" {
-		volumes := []corev1.Volume{}
-		volumeMounts := []corev1.VolumeMount{}
-
-		if spec.WorkspacePVC != "" {
-			volumes = append(volumes, corev1.Volume{
-				Name: "workspace",
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: spec.WorkspacePVC,
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "workspace",
-				MountPath: "/workspace",
-			})
-		}
-
-		if spec.ClaudeHomePVC != "" {
-			volumes = append(volumes, corev1.Volume{
-				Name: "claude-home",
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: spec.ClaudeHomePVC,
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "claude-home",
-				MountPath: "/home/claude",
-			})
-		}
-
-		// Add editor config ConfigMap if specified
-		if spec.EditorConfigMapName != "" {
-			volumes = append(volumes, corev1.Volume{
-				Name: "editor-config",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: spec.EditorConfigMapName,
-						},
-						Items: []corev1.KeyToPath{
-							{Key: "helix-config.toml", Path: "helix/config.toml"},
-							{Key: "helix-languages.toml", Path: "helix/languages.toml"},
-							{Key: "zellij-config.kdl", Path: "zellij/config.kdl"},
-						},
-					},
-				},
-			})
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "editor-config",
-				MountPath: "/root/.config",
-				ReadOnly:  true,
-			})
-		}
-
-		pod.Spec.Volumes = volumes
-		pod.Spec.Containers[0].VolumeMounts = volumeMounts
+	// Build volumes and volume mounts
+	volumes := []corev1.Volume{
+		// Claude bin volume (emptyDir) - always included
+		{
+			Name: "claude-bin",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
 	}
+
+	volumeMounts := []corev1.VolumeMount{
+		// Claude bin mount - always included
+		{
+			Name:      "claude-bin",
+			MountPath: "/root/.local/bin",
+			ReadOnly:  true,
+		},
+	}
+
+	// Workspace volume - always included (PVC or emptyDir)
+	if spec.WorkspacePVC != "" {
+		// Use PVC if specified
+		volumes = append(volumes, corev1.Volume{
+			Name: "workspace",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: spec.WorkspacePVC,
+				},
+			},
+		})
+	} else {
+		// Use emptyDir by default (needed for git clone in init container)
+		volumes = append(volumes, corev1.Volume{
+			Name: "workspace",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+	}
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      "workspace",
+		MountPath: "/workspace",
+	})
+
+	if spec.ClaudeHomePVC != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "claude-home",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: spec.ClaudeHomePVC,
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "claude-home",
+			MountPath: "/home/claude",
+		})
+	}
+
+	// Add editor config ConfigMap if specified
+	if spec.EditorConfigMapName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "editor-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: spec.EditorConfigMapName,
+					},
+					Items: []corev1.KeyToPath{
+						{Key: "helix-config.toml", Path: "helix/config.toml"},
+						{Key: "helix-languages.toml", Path: "helix/languages.toml"},
+						{Key: "zellij-config.kdl", Path: "zellij/config.kdl"},
+					},
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "editor-config",
+			MountPath: "/root/.config",
+			ReadOnly:  true,
+		})
+	}
+
+	pod.Spec.Volumes = volumes
+	pod.Spec.Containers[0].VolumeMounts = volumeMounts
 
 	_, err := c.clientset.CoreV1().Pods(spec.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
