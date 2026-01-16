@@ -59,13 +59,13 @@ Examples:
 	}
 
 	// Flags
-	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL to clone (use with --no-sync)")
+	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL to clone (automatically enables --no-sync)")
 	cmd.Flags().StringVar(&syncPath, "sync", "", "Local path to sync (default: current directory)")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace")
 	cmd.Flags().StringVar(&cpu, "cpu", "", "CPU limit (e.g., '1', '2')")
 	cmd.Flags().StringVar(&memory, "memory", "", "Memory limit (e.g., '2Gi', '4Gi')")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch to clone (default: repository default branch)")
-	cmd.Flags().BoolVar(&noSync, "no-sync", false, "Disable file synchronization")
+	cmd.Flags().BoolVar(&noSync, "no-sync", false, "Disable file synchronization (automatically enabled when using --repo)")
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
@@ -107,6 +107,11 @@ func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, names
 
 func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
 	ctx := context.Background()
+
+	// Auto-enable --no-sync when --repo is specified
+	if repo != "" {
+		noSync = true
+	}
 
 	// 1. Load global config for defaults
 	store, err := config.NewStore()
