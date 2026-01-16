@@ -54,6 +54,7 @@ type SessionConfig struct {
 	ClaudeHomePVC   string              `yaml:"claudeHomePVC"`
 	CommitHash      string              `yaml:"commitHash,omitempty"`
 	Image           string              `yaml:"image,omitempty"`
+	Command         []string            `yaml:"command,omitempty"`
 	GitSecret       string              `yaml:"gitSecret,omitempty"`
 	GitClone        GitCloneConfig      `yaml:"gitClone,omitempty"`
 	Status          SessionStatus       `yaml:"status"`

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/illumination-k/kodama/pkg/agent"
@@ -27,6 +28,7 @@ func NewStartCommand() *cobra.Command {
 		prompt       string
 		promptFile   string
 		image        string
+		command      string
 		gitSecret    string
 		cloneDepth   int
 		singleBranch bool
@@ -53,7 +55,7 @@ Examples:
 			}
 
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
-			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, kubeconfigPath, prompt, promptFile, image, gitSecret, cloneDepth, singleBranch, gitCloneArgs, configFile)
+			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, kubeconfigPath, prompt, promptFile, image, command, gitSecret, cloneDepth, singleBranch, gitCloneArgs, configFile)
 		},
 	}
 
@@ -67,6 +69,7 @@ Examples:
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
+	cmd.Flags().StringVar(&command, "cmd", "", "Pod command override (space-separated, e.g., 'sh -c echo hello')")
 	cmd.Flags().StringVar(&gitSecret, "git-secret", "", "Kubernetes secret name for git credentials (overrides global default)")
 	cmd.Flags().IntVar(&cloneDepth, "clone-depth", 0, "Create a shallow clone with specified depth (0 = full clone)")
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
@@ -103,7 +106,7 @@ func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, names
 	fmt.Println("✓ Cleanup completed")
 }
 
-func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
+func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPath, prompt, promptFile, image, command, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
 	ctx := context.Background()
 
 	// 1. Load global config for defaults
@@ -207,6 +210,9 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 		if repo == "" && templateConfig.Repo != "" {
 			repo = templateConfig.Repo
 		}
+		if command == "" && len(templateConfig.Command) > 0 {
+			command = strings.Join(templateConfig.Command, " ")
+		}
 	}
 
 	// Layer 3: CLI flags (already set, highest priority - no override needed)
@@ -249,6 +255,12 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 		}
 	}
 
+	// Parse command string into slice
+	var cmdSlice []string
+	if command != "" {
+		cmdSlice = strings.Fields(command)
+	}
+
 	// 7. Create session config
 	now := time.Now()
 	session := &config.SessionConfig{
@@ -257,6 +269,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 		Repo:      repo,
 		PodName:   fmt.Sprintf("kodama-%s", name),
 		Image:     image,
+		Command:   cmdSlice,
 		GitSecret: gitSecret,
 		GitClone: config.GitCloneConfig{
 			Depth:        cloneDepth,
@@ -381,6 +394,12 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 		effectiveBranch = fmt.Sprintf("kodama/%s", name)
 	}
 
+	// Determine command to run in pod
+	effectiveCommand := session.Command
+	if len(effectiveCommand) == 0 {
+		effectiveCommand = []string{"sleep", "infinity"}
+	}
+
 	podSpec := &kubernetes.PodSpec{
 		Name:                session.PodName,
 		Namespace:           namespace,
@@ -389,7 +408,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 		MemoryLimit:         memory,
 		GitSecretName:       effectiveGitSecret,
 		EditorConfigMapName: configMapName,
-		Command:             []string{"sleep", "infinity"},
+		Command:             effectiveCommand,
 
 		// Git configuration for workspace-initializer init container
 		GitRepo:         repo,
