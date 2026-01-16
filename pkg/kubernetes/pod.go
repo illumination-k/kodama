@@ -3,9 +3,9 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/illumination-k/kodama/pkg/gitcmd"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -46,14 +46,21 @@ func createWorkspaceInitializerInitContainer(spec *PodSpec) *corev1.Container {
 		return nil
 	}
 
-	// Build git clone script
-	cloneScript := buildGitCloneScript(spec)
+	// Build git clone options from spec
+	opts := &gitcmd.CloneOptions{
+		Depth:        spec.GitCloneDepth,
+		SingleBranch: spec.GitSingleBranch,
+		ExtraArgs:    spec.GitCloneArgs,
+	}
+
+	// Build git initialization script using gitcmd package
+	initScript := gitcmd.BuildGitInitScript(spec.GitRepo, spec.GitBranch, opts)
 
 	container := corev1.Container{
 		Name:    "workspace-initializer",
 		Image:   "ubuntu:24.04",
 		Command: []string{"/bin/bash", "-c"},
-		Args:    []string{cloneScript},
+		Args:    []string{initScript},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "workspace",
@@ -79,58 +86,6 @@ func createWorkspaceInitializerInitContainer(spec *PodSpec) *corev1.Container {
 	}
 
 	return &container
-}
-
-// buildGitCloneScript generates bash script for git clone operation
-func buildGitCloneScript(spec *PodSpec) string {
-	var script strings.Builder
-
-	script.WriteString("set -e\n")
-	script.WriteString("echo 'Installing git...'\n")
-	script.WriteString("apt-get update -qq && apt-get install -y -qq git\n\n")
-
-	script.WriteString("echo 'Cloning repository...'\n")
-	script.WriteString(fmt.Sprintf("REPO_URL='%s'\n", spec.GitRepo))
-
-	// Inject token for HTTPS URLs
-	script.WriteString(`
-if [[ "$REPO_URL" == https://* ]] && [ -n "$GH_TOKEN" ]; then
-    # Inject token into HTTPS URL
-    CLONE_URL="${REPO_URL/https:\/\//https://${GH_TOKEN}@}"
-else
-    CLONE_URL="$REPO_URL"
-fi
-`)
-
-	// Build clone command
-	script.WriteString("git clone")
-	if spec.GitCloneDepth > 0 {
-		script.WriteString(fmt.Sprintf(" --depth %d", spec.GitCloneDepth))
-	}
-	if spec.GitSingleBranch {
-		script.WriteString(" --single-branch")
-	}
-	if spec.GitCloneArgs != "" {
-		script.WriteString(fmt.Sprintf(" %s", spec.GitCloneArgs))
-	}
-	script.WriteString(" \"$CLONE_URL\" /workspace\n\n")
-
-	// Branch management
-	if spec.GitBranch != "" {
-		script.WriteString("cd /workspace\n")
-		script.WriteString("CURRENT_BRANCH=$(git branch --show-current)\n")
-		script.WriteString("echo \"Current branch: $CURRENT_BRANCH\"\n\n")
-
-		script.WriteString("# Create feature branch if on protected branch\n")
-		script.WriteString(`if [[ "$CURRENT_BRANCH" =~ ^(main|master|trunk|development)$ ]]; then
-    echo "Creating feature branch: ` + spec.GitBranch + `"
-    git checkout -b "` + spec.GitBranch + `"
-fi
-`)
-	}
-
-	script.WriteString("\necho 'Repository setup complete'\n")
-	return script.String()
 }
 
 // CreatePod creates a new pod in the cluster

@@ -8,7 +8,7 @@ import (
 
 	"github.com/illumination-k/kodama/pkg/agent"
 	"github.com/illumination-k/kodama/pkg/config"
-	"github.com/illumination-k/kodama/pkg/git"
+	"github.com/illumination-k/kodama/pkg/gitcmd"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/illumination-k/kodama/pkg/sync"
 	"github.com/illumination-k/kodama/pkg/sync/exclude"
@@ -209,7 +209,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	}
 
 	if gitCloneArgs != "" {
-		if validateErr := git.ValidateCloneArgs(gitCloneArgs); validateErr != nil {
+		if validateErr := gitcmd.ValidateCloneArgs(gitCloneArgs); validateErr != nil {
 			return fmt.Errorf("invalid git clone arguments: %w", validateErr)
 		}
 	}
