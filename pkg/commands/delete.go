@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
@@ -104,7 +105,16 @@ func runDelete(name string, keepConfig, force bool, kubeconfigPath string) error
 		if err := k8sClient.DeletePod(ctx, session.PodName, session.Namespace); err != nil {
 			fmt.Printf("⚠️  Warning: Failed to delete pod: %v\n", err)
 		} else {
-			fmt.Println("✓ Pod deleted")
+			fmt.Println("✓ Pod deletion initiated")
+
+			// Wait for pod to be fully deleted
+			fmt.Println("⏳ Waiting for pod termination...")
+			waitTimeout := 2 * time.Minute
+			if err := k8sClient.WaitForPodDeleted(ctx, session.PodName, session.Namespace, waitTimeout); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to confirm pod deletion: %v\n", err)
+			} else {
+				fmt.Println("✓ Pod fully terminated and removed")
+			}
 		}
 
 		// Delete editor config ConfigMap
