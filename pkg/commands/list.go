@@ -114,7 +114,7 @@ func outputTable(sessions []*config.SessionConfig) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	defer func() { _ = w.Flush() }()
 
-	_, _ = fmt.Fprintln(w, "NAME\tSTATUS\tNAMESPACE\tSYNC\tAGE")
+	_, _ = fmt.Fprintln(w, "NAME\tSTATUS\tNAMESPACE\tPATH\tSYNC\tAGE")
 
 	for _, session := range sessions {
 		syncStatus := "-"
@@ -122,12 +122,21 @@ func outputTable(sessions []*config.SessionConfig) error {
 			syncStatus = "Active"
 		}
 
+		// Show repo if available, otherwise show local path
+		pathDisplay := "-"
+		if session.Repo != "" {
+			pathDisplay = session.Repo
+		} else if session.Sync.LocalPath != "" {
+			pathDisplay = session.Sync.LocalPath
+		}
+
 		age := formatDuration(time.Since(session.CreatedAt))
 
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			session.Name,
 			session.Status,
 			session.Namespace,
+			pathDisplay,
 			syncStatus,
 			age,
 		)
