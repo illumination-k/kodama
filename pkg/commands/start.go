@@ -11,21 +11,23 @@ import (
 // NewStartCommand creates a new start command
 func NewStartCommand() *cobra.Command {
 	var (
-		repo         string
-		syncPath     string
-		namespace    string
-		cpu          string
-		memory       string
-		branch       string
-		prompt       string
-		promptFile   string
-		image        string
-		command      string
-		gitSecret    string
-		cloneDepth   int
-		singleBranch bool
-		gitCloneArgs string
-		configFile   string
+		repo           string
+		syncPath       string
+		namespace      string
+		cpu            string
+		memory         string
+		branch         string
+		prompt         string
+		promptFile     string
+		image          string
+		command        string
+		gitSecret      string
+		cloneDepth     int
+		singleBranch   bool
+		gitCloneArgs   string
+		configFile     string
+		diffViewer     bool
+		diffViewerPort int
 	)
 
 	cmd := &cobra.Command{
@@ -66,6 +68,8 @@ Examples:
 				SingleBranch:   singleBranch,
 				GitCloneArgs:   gitCloneArgs,
 				ConfigFile:     configFile,
+				DiffViewer:     diffViewer,
+				DiffViewerPort: diffViewerPort,
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -83,6 +87,15 @@ Examples:
 			if session.Sync.Enabled {
 				fmt.Printf("\n📁 Files are syncing between %s and pod\n", session.Sync.LocalPath)
 				fmt.Println("   Tip: Use 'kubectl kodama attach --sync' for live sync during development")
+			}
+
+			if session.DiffViewer != nil && session.DiffViewer.Enabled {
+				port := session.DiffViewer.Port
+				if port == 0 {
+					port = 4966
+				}
+				fmt.Printf("\n🔍 Diff viewer enabled on port %d\n", port)
+				fmt.Printf("   Access via: kubectl port-forward -n %s %s %d:%d\n", session.Namespace, session.PodName, port, port)
 			}
 
 			return nil
@@ -105,6 +118,8 @@ Examples:
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
 	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")
 	cmd.Flags().StringVar(&configFile, "config", "", "Path to session template config file")
+	cmd.Flags().BoolVar(&diffViewer, "diff-viewer", false, "Enable difit diff viewer sidecar for reviewing changes")
+	cmd.Flags().IntVar(&diffViewerPort, "diff-viewer-port", 0, "Port for difit diff viewer (default: 4966)")
 
 	return cmd
 }

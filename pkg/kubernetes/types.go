@@ -42,6 +42,16 @@ type PodSpec struct {
 	GitCloneDepth   int    // Clone depth (0 for full clone)
 	GitSingleBranch bool   // Whether to clone single branch only
 	GitCloneArgs    string // Additional git clone arguments
+
+	// DiffViewer sidecar configuration
+	DiffViewer *DiffViewerSpec // DiffViewer sidecar settings (nil = disabled)
+}
+
+// DiffViewerSpec contains specifications for the difit diff viewer sidecar
+type DiffViewerSpec struct {
+	Enabled bool   // Whether to enable the diff viewer sidecar
+	Image   string // Container image for difit (default: node:21-slim)
+	Port    int32  // Port for difit web server (default: 4966)
 }
 
 // PVCSpec contains specifications for creating a PersistentVolumeClaim

@@ -62,6 +62,14 @@ type SessionConfig struct {
 	ClaudeAuth      *ClaudeAuthOverride `yaml:"claudeAuth,omitempty"`
 	AgentExecutions []AgentExecution    `yaml:"agentExecutions,omitempty"`
 	LastAgentRun    *time.Time          `yaml:"lastAgentRun,omitempty"`
+	DiffViewer      *DiffViewerConfig   `yaml:"diffViewer,omitempty"`
+}
+
+// DiffViewerConfig holds configuration for the difit diff viewer sidecar
+type DiffViewerConfig struct {
+	Enabled bool   `yaml:"enabled"`           // Whether to enable the diff viewer sidecar
+	Image   string `yaml:"image,omitempty"`   // Container image for difit (default: node:21-slim)
+	Port    int32  `yaml:"port,omitempty"`    // Port for difit web server (default: 4966)
 }
 
 // ClaudeAuthOverride allows per-session authentication overrides
