@@ -27,6 +27,13 @@ func NewDevCommand() *cobra.Command {
 		gitCloneArgs string
 		configFile   string
 		attachCmd    string
+		ttyMode      bool
+		localPort    int
+		noBrowser    bool
+		ttydEnabled  bool
+		ttydPort     int
+		ttydOptions  string
+		ttydReadonly bool
 	)
 
 	cmd := &cobra.Command{
@@ -35,11 +42,14 @@ func NewDevCommand() *cobra.Command {
 		Long: `Start a new Claude Code session and immediately attach to it.
 
 This command combines 'start' and 'attach' into a single workflow.
+By default, uses ttyd (web-based terminal) if enabled in the session.
 
 Examples:
   kubectl kodama dev my-work --sync ~/projects/myrepo
   kubectl kodama dev my-work --repo https://github.com/user/repo --branch main
-  kubectl kodama dev my-work --namespace dev --cpu 2 --memory 4Gi`,
+  kubectl kodama dev my-work --namespace dev --cpu 2 --memory 4Gi
+  kubectl kodama dev my-work --tty                    # Force TTY mode
+  kubectl kodama dev my-work --no-browser             # Use ttyd without opening browser`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validate mutual exclusivity of prompt flags
@@ -52,23 +62,29 @@ Examples:
 
 			// 1. Start the session
 			startOpts := usecase.StartSessionOptions{
-				Name:           args[0],
-				Repo:           repo,
-				SyncPath:       syncPath,
-				Namespace:      namespace,
-				CPU:            cpu,
-				Memory:         memory,
-				Branch:         branch,
-				KubeconfigPath: kubeconfigPath,
-				Prompt:         prompt,
-				PromptFile:     promptFile,
-				Image:          image,
-				Command:        command,
-				GitSecret:      gitSecret,
-				CloneDepth:     cloneDepth,
-				SingleBranch:   singleBranch,
-				GitCloneArgs:   gitCloneArgs,
-				ConfigFile:     configFile,
+				Name:            args[0],
+				Repo:            repo,
+				SyncPath:        syncPath,
+				Namespace:       namespace,
+				CPU:             cpu,
+				Memory:          memory,
+				Branch:          branch,
+				KubeconfigPath:  kubeconfigPath,
+				Prompt:          prompt,
+				PromptFile:      promptFile,
+				Image:           image,
+				Command:         command,
+				GitSecret:       gitSecret,
+				CloneDepth:      cloneDepth,
+				SingleBranch:    singleBranch,
+				GitCloneArgs:    gitCloneArgs,
+				ConfigFile:      configFile,
+				TtydEnabled:     cmd.Flags().Changed("ttyd"),
+				TtydEnabledVal:  ttydEnabled,
+				TtydPort:        ttydPort,
+				TtydOptions:     ttydOptions,
+				TtydReadonly:    ttydReadonly,
+				TtydReadonlySet: cmd.Flags().Changed("ttyd-readonly"),
 			}
 
 			session, err := usecase.StartSession(ctx, startOpts)
@@ -86,7 +102,16 @@ Examples:
 			// 2. Attach to the session
 			fmt.Printf("\n🔗 Attaching to session '%s'...\n", session.Name)
 
-			return usecase.AttachToSession(ctx, session, attachCmd, kubeconfigPath)
+			attachOpts := usecase.AttachSessionOptions{
+				Name:           session.Name,
+				Command:        attachCmd,
+				KubeconfigPath: kubeconfigPath,
+				TtyMode:        ttyMode,
+				LocalPort:      localPort,
+				NoBrowser:      noBrowser,
+			}
+
+			return usecase.AttachSession(ctx, attachOpts)
 		},
 	}
 
@@ -106,9 +131,16 @@ Examples:
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
 	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")
 	cmd.Flags().StringVar(&configFile, "config", "", "Path to session template config file")
+	cmd.Flags().BoolVar(&ttydEnabled, "ttyd", true, "Enable ttyd (web-based terminal)")
+	cmd.Flags().IntVar(&ttydPort, "ttyd-port", 0, "Ttyd port (default: 7681)")
+	cmd.Flags().StringVar(&ttydOptions, "ttyd-options", "", "Additional ttyd options")
+	cmd.Flags().BoolVar(&ttydReadonly, "ttyd-readonly", false, "Enable read-only mode for ttyd (disables terminal input)")
 
 	// Attach flags
 	cmd.Flags().StringVar(&attachCmd, "attach-command", "", "Command to run when attaching (default: interactive shell)")
+	cmd.Flags().BoolVar(&ttyMode, "tty", false, "Force TTY mode (disable ttyd)")
+	cmd.Flags().IntVar(&localPort, "port", 0, "Local port for port-forward when using ttyd (default: same as pod port)")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "Don't open browser automatically when using ttyd")
 
 	return cmd
 }

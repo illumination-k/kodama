@@ -20,27 +20,29 @@ import (
 
 // StartSessionOptions contains all options for starting a session
 type StartSessionOptions struct {
-	Name           string
-	Repo           string
-	SyncPath       string
-	Namespace      string
-	CPU            string
-	Memory         string
-	Branch         string
-	KubeconfigPath string
-	Prompt         string
-	PromptFile     string
-	Image          string
-	Command        string
-	GitSecret      string
-	CloneDepth     int
-	SingleBranch   bool
-	GitCloneArgs   string
-	ConfigFile     string
-	TtydEnabled    bool
-	TtydEnabledVal bool
-	TtydPort       int
-	TtydOptions    string
+	Name            string
+	Repo            string
+	SyncPath        string
+	Namespace       string
+	CPU             string
+	Memory          string
+	Branch          string
+	KubeconfigPath  string
+	Prompt          string
+	PromptFile      string
+	Image           string
+	Command         string
+	GitSecret       string
+	CloneDepth      int
+	SingleBranch    bool
+	GitCloneArgs    string
+	ConfigFile      string
+	TtydEnabled     bool
+	TtydEnabledVal  bool
+	TtydPort        int
+	TtydOptions     string
+	TtydReadonly    bool
+	TtydReadonlySet bool
 }
 
 // AttachSessionOptions contains all options for attaching to a session
@@ -125,6 +127,11 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	}
 	ttydPort := globalConfig.Defaults.Ttyd.Port
 	ttydOptions := globalConfig.Defaults.Ttyd.Options
+	// Default ttyd writable to true if not explicitly set in global config
+	ttydWritable := true
+	if globalConfig.Defaults.Ttyd.Writable != nil {
+		ttydWritable = *globalConfig.Defaults.Ttyd.Writable
+	}
 
 	// Layer 1: Apply global config defaults (if CLI flag is empty)
 	if namespace == "" {
@@ -188,6 +195,9 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		if templateConfig.Ttyd.Options != "" {
 			ttydOptions = templateConfig.Ttyd.Options
 		}
+		if templateConfig.Ttyd.Writable != nil {
+			ttydWritable = *templateConfig.Ttyd.Writable
+		}
 	}
 
 	// Layer 3: CLI flags (already set, highest priority - no override needed)
@@ -200,6 +210,9 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	}
 	if opts.TtydOptions != "" {
 		ttydOptions = opts.TtydOptions
+	}
+	if opts.TtydReadonlySet {
+		ttydWritable = !opts.TtydReadonly
 	}
 
 	// Validate required fields after merge
@@ -270,9 +283,10 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 			Memory: memory,
 		},
 		Ttyd: config.TtydConfig{
-			Enabled: &ttydEnabled,
-			Port:    ttydPort,
-			Options: ttydOptions,
+			Enabled:  &ttydEnabled,
+			Port:     ttydPort,
+			Options:  ttydOptions,
+			Writable: &ttydWritable,
 		},
 		Sync: config.SyncConfig{
 			Enabled:   syncEnabled,
@@ -389,9 +403,10 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		GitCloneArgs:    gitCloneArgs,
 
 		// Ttyd configuration
-		TtydEnabled: ttydEnabled,
-		TtydPort:    ttydPort,
-		TtydOptions: ttydOptions,
+		TtydEnabled:  ttydEnabled,
+		TtydPort:     ttydPort,
+		TtydOptions:  ttydOptions,
+		TtydWritable: ttydWritable,
 	}
 
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {

@@ -71,6 +71,7 @@ type GlobalSyncConfig struct {
 func DefaultGlobalConfig() *GlobalConfig {
 	useGitignore := true
 	ttydEnabled := true
+	ttydWritable := true
 	return &GlobalConfig{
 		Defaults: DefaultsConfig{
 			Namespace: "default",
@@ -84,8 +85,9 @@ func DefaultGlobalConfig() *GlobalConfig {
 				ClaudeHome: "1Gi",
 			},
 			Ttyd: TtydConfig{
-				Enabled: &ttydEnabled,
-				Port:    7681,
+				Enabled:  &ttydEnabled,
+				Port:     7681,
+				Writable: &ttydWritable,
 			},
 			BranchPrefix: "kodama/",
 		},
@@ -129,6 +131,10 @@ func (g *GlobalConfig) Merge(other *GlobalConfig) {
 	// Enabled is a *bool, only merge if explicitly set (non-nil)
 	if other.Defaults.Ttyd.Enabled != nil {
 		g.Defaults.Ttyd.Enabled = other.Defaults.Ttyd.Enabled
+	}
+	// Writable is a *bool, only merge if explicitly set (non-nil)
+	if other.Defaults.Ttyd.Writable != nil {
+		g.Defaults.Ttyd.Writable = other.Defaults.Ttyd.Writable
 	}
 	if other.Git.SecretName != "" {
 		g.Git.SecretName = other.Git.SecretName

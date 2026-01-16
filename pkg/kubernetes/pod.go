@@ -139,6 +139,10 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		}
 		// Build ttyd command with options
 		ttydCmd := fmt.Sprintf("cd /workspace && /kodama/bin/ttyd -p %d", ttydPort)
+		// Add writable flag if enabled (default: true)
+		if spec.TtydWritable {
+			ttydCmd += " -W"
+		}
 		if spec.TtydOptions != "" {
 			ttydCmd += " " + spec.TtydOptions
 		}

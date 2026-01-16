@@ -29,6 +29,7 @@ func NewStartCommand() *cobra.Command {
 		ttydEnabled  bool
 		ttydPort     int
 		ttydOptions  string
+		ttydReadonly bool
 	)
 
 	cmd := &cobra.Command{
@@ -52,27 +53,29 @@ Examples:
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
 
 			opts := usecase.StartSessionOptions{
-				Name:           args[0],
-				Repo:           repo,
-				SyncPath:       syncPath,
-				Namespace:      namespace,
-				CPU:            cpu,
-				Memory:         memory,
-				Branch:         branch,
-				KubeconfigPath: kubeconfigPath,
-				Prompt:         prompt,
-				PromptFile:     promptFile,
-				Image:          image,
-				Command:        command,
-				GitSecret:      gitSecret,
-				CloneDepth:     cloneDepth,
-				SingleBranch:   singleBranch,
-				GitCloneArgs:   gitCloneArgs,
-				ConfigFile:     configFile,
-				TtydEnabled:    cmd.Flags().Changed("ttyd"),
-				TtydEnabledVal: ttydEnabled,
-				TtydPort:       ttydPort,
-				TtydOptions:    ttydOptions,
+				Name:            args[0],
+				Repo:            repo,
+				SyncPath:        syncPath,
+				Namespace:       namespace,
+				CPU:             cpu,
+				Memory:          memory,
+				Branch:          branch,
+				KubeconfigPath:  kubeconfigPath,
+				Prompt:          prompt,
+				PromptFile:      promptFile,
+				Image:           image,
+				Command:         command,
+				GitSecret:       gitSecret,
+				CloneDepth:      cloneDepth,
+				SingleBranch:    singleBranch,
+				GitCloneArgs:    gitCloneArgs,
+				ConfigFile:      configFile,
+				TtydEnabled:     cmd.Flags().Changed("ttyd"),
+				TtydEnabledVal:  ttydEnabled,
+				TtydPort:        ttydPort,
+				TtydOptions:     ttydOptions,
+				TtydReadonly:    ttydReadonly,
+				TtydReadonlySet: cmd.Flags().Changed("ttyd-readonly"),
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -83,13 +86,14 @@ Examples:
 			// Print success message
 			fmt.Printf("\n✨ Session '%s' is ready!\n", session.Name)
 
-			if session.Ttyd.Enabled {
+			isTtydEnabled := session.Ttyd.Enabled != nil && *session.Ttyd.Enabled
+			if isTtydEnabled {
 				fmt.Printf("\n🌐 Web-based terminal (ttyd) is enabled\n")
 				fmt.Printf("   The session will be accessible via browser\n")
 			}
 
 			fmt.Printf("\nNext steps:\n")
-			if session.Ttyd.Enabled {
+			if isTtydEnabled {
 				fmt.Printf("  kubectl kodama attach %s           # Open in browser (ttyd)\n", session.Name)
 				fmt.Printf("  kubectl kodama attach %s --tty     # Use traditional TTY mode\n", session.Name)
 			} else {
@@ -126,6 +130,7 @@ Examples:
 	cmd.Flags().BoolVar(&ttydEnabled, "ttyd", true, "Enable ttyd (web-based terminal)")
 	cmd.Flags().IntVar(&ttydPort, "ttyd-port", 0, "Ttyd port (default: 7681)")
 	cmd.Flags().StringVar(&ttydOptions, "ttyd-options", "", "Additional ttyd options")
+	cmd.Flags().BoolVar(&ttydReadonly, "ttyd-readonly", false, "Enable read-only mode for ttyd (disables terminal input)")
 
 	return cmd
 }

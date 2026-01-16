@@ -44,9 +44,10 @@ type PodSpec struct {
 	GitCloneArgs    string // Additional git clone arguments
 
 	// Ttyd (Web-based terminal) configuration
-	TtydEnabled bool
-	TtydPort    int
-	TtydOptions string
+	TtydEnabled  bool
+	TtydPort     int
+	TtydOptions  string
+	TtydWritable bool
 }
 
 // PVCSpec contains specifications for creating a PersistentVolumeClaim
