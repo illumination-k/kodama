@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewStartCommand creates a new start command
-func NewStartCommand() *cobra.Command {
+// NewDevCommand creates a new dev command that combines start and attach
+func NewDevCommand() *cobra.Command {
 	var (
 		repo         string
 		syncPath     string
@@ -26,19 +26,20 @@ func NewStartCommand() *cobra.Command {
 		singleBranch bool
 		gitCloneArgs string
 		configFile   string
+		attachCmd    string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "start <name>",
-		Short: "Start a new Claude Code session",
-		Long: `Start a new Claude Code session in Kubernetes.
+		Use:   "dev <name>",
+		Short: "Start a new session and attach to it",
+		Long: `Start a new Claude Code session and immediately attach to it.
 
-Creates a pod running claude-code and syncs files from your local machine.
+This command combines 'start' and 'attach' into a single workflow.
 
 Examples:
-  kubectl kodama start my-work --sync ~/projects/myrepo
-  kubectl kodama start my-work --repo https://github.com/user/repo --branch main
-  kubectl kodama start my-work --namespace dev --cpu 2 --memory 4Gi`,
+  kubectl kodama dev my-work --sync ~/projects/myrepo
+  kubectl kodama dev my-work --repo https://github.com/user/repo --branch main
+  kubectl kodama dev my-work --namespace dev --cpu 2 --memory 4Gi`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validate mutual exclusivity of prompt flags
@@ -47,8 +48,10 @@ Examples:
 			}
 
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
+			ctx := context.Background()
 
-			opts := usecase.StartSessionOptions{
+			// 1. Start the session
+			startOpts := usecase.StartSessionOptions{
 				Name:           args[0],
 				Repo:           repo,
 				SyncPath:       syncPath,
@@ -68,28 +71,26 @@ Examples:
 				ConfigFile:     configFile,
 			}
 
-			session, err := usecase.StartSession(context.Background(), opts)
+			session, err := usecase.StartSession(ctx, startOpts)
 			if err != nil {
 				return err
 			}
 
 			// Print success message
 			fmt.Printf("\n✨ Session '%s' is ready!\n", session.Name)
-			fmt.Printf("\nNext steps:\n")
-			fmt.Printf("  kubectl kodama attach %s    # Attach to session\n", session.Name)
-			fmt.Printf("  kubectl kodama list         # List all sessions\n")
-			fmt.Printf("  kubectl kodama delete %s    # Delete session\n", session.Name)
 
 			if session.Sync.Enabled {
-				fmt.Printf("\n📁 Files are syncing between %s and pod\n", session.Sync.LocalPath)
-				fmt.Println("   Tip: Use 'kubectl kodama attach --sync' for live sync during development")
+				fmt.Printf("📁 Files synced from %s\n", session.Sync.LocalPath)
 			}
 
-			return nil
+			// 2. Attach to the session
+			fmt.Printf("\n🔗 Attaching to session '%s'...\n", session.Name)
+
+			return usecase.AttachToSession(ctx, session, attachCmd, kubeconfigPath)
 		},
 	}
 
-	// Flags
+	// Start flags
 	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL to clone (mutually exclusive with --sync)")
 	cmd.Flags().StringVar(&syncPath, "sync", "", "Local path to sync (default: current directory, mutually exclusive with --repo)")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace")
@@ -105,6 +106,9 @@ Examples:
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
 	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")
 	cmd.Flags().StringVar(&configFile, "config", "", "Path to session template config file")
+
+	// Attach flags
+	cmd.Flags().StringVar(&attachCmd, "attach-command", "", "Command to run when attaching (default: interactive shell)")
 
 	return cmd
 }
