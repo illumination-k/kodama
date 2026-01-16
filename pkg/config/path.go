@@ -43,6 +43,7 @@ type CustomDirSync struct {
 	Destination  string   `yaml:"destination"`
 	Exclude      []string `yaml:"exclude,omitempty"`
 	UseGitignore *bool    `yaml:"useGitignore,omitempty"`
+	Recursive    bool     `yaml:"recursive,omitempty"`
 }
 
 // Validate checks if the custom directory sync configuration is valid
@@ -67,11 +68,17 @@ func (c *CustomDirSync) Validate() error {
 	}
 
 	// Check if source exists
-	if _, err := os.Stat(resolvedSource); err != nil {
+	info, err := os.Stat(resolvedSource)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("source path does not exist: %s", resolvedSource)
 		}
 		return fmt.Errorf("failed to access source path: %w", err)
+	}
+
+	// If recursive is set, source must be a directory
+	if c.Recursive && !info.IsDir() {
+		return fmt.Errorf("recursive source must be a directory, got file: %s", resolvedSource)
 	}
 
 	return nil

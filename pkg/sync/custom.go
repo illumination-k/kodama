@@ -3,6 +3,8 @@ package sync
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/sync/exclude"
@@ -31,10 +33,16 @@ func (c *CustomDirSyncManager) SyncCustomDirs(
 		return nil
 	}
 
-	fmt.Printf("🔄 Syncing %d custom director%s...\n", len(customDirs), pluralize(len(customDirs)))
+	// Expand recursive entries into individual subdirectory syncs
+	expandedDirs, err := c.expandCustomDirs(customDirs, globalConfig)
+	if err != nil {
+		return fmt.Errorf("failed to expand custom directories: %w", err)
+	}
+
+	fmt.Printf("🔄 Syncing %d custom director%s...\n", len(expandedDirs), pluralize(len(expandedDirs)))
 
 	successCount := 0
-	for i, customDir := range customDirs {
+	for i, customDir := range expandedDirs {
 		// Validate custom directory config
 		if err := customDir.Validate(); err != nil {
 			fmt.Printf("⚠️  Warning: Skipping custom directory %d: %v\n", i+1, err)
@@ -69,14 +77,92 @@ func (c *CustomDirSyncManager) SyncCustomDirs(
 		successCount++
 	}
 
-	if successCount == 0 && len(customDirs) > 0 {
+	if successCount == 0 && len(expandedDirs) > 0 {
 		return fmt.Errorf("failed to sync any custom directories")
 	}
 
 	fmt.Printf("✓ Successfully synced %d/%d custom director%s\n",
-		successCount, len(customDirs), pluralize(len(customDirs)))
+		successCount, len(expandedDirs), pluralize(len(expandedDirs)))
 
 	return nil
+}
+
+// expandCustomDirs expands recursive directory entries into individual subdirectory syncs
+func (c *CustomDirSyncManager) expandCustomDirs(
+	customDirs []config.CustomDirSync,
+	globalConfig *config.GlobalConfig,
+) ([]config.CustomDirSync, error) {
+	var result []config.CustomDirSync
+
+	for _, dir := range customDirs {
+		if !dir.Recursive {
+			result = append(result, dir)
+			continue
+		}
+
+		subdirs, err := c.discoverSubdirectories(dir, globalConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to expand recursive directory %s: %w", dir.Source, err)
+		}
+
+		result = append(result, subdirs...)
+	}
+
+	return result, nil
+}
+
+// discoverSubdirectories finds all immediate subdirectories of a recursive directory
+func (c *CustomDirSyncManager) discoverSubdirectories(
+	parentDir config.CustomDirSync,
+	globalConfig *config.GlobalConfig,
+) ([]config.CustomDirSync, error) {
+	// 1. Resolve source path
+	resolvedSource, err := parentDir.ResolveSource()
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Build exclude manager for filtering
+	excludeCfg := c.buildExcludeConfig(parentDir, globalConfig)
+	excludeCfg.BasePath = resolvedSource
+	excludeMgr, err := exclude.NewManager(*excludeCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Read immediate subdirectories
+	entries, err := os.ReadDir(resolvedSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	// 4. Create CustomDirSync for each valid subdirectory
+	result := make([]config.CustomDirSync, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue // Skip files
+		}
+
+		subdirPath := filepath.Join(resolvedSource, entry.Name())
+
+		// Check if subdirectory should be excluded
+		if excludeMgr.ShouldExcludeDir(subdirPath) {
+			continue
+		}
+
+		// Create new entry inheriting parent settings
+		subdirSync := config.CustomDirSync{
+			Source:       subdirPath,
+			Destination:  filepath.Join(parentDir.Destination, entry.Name()),
+			Exclude:      parentDir.Exclude,
+			UseGitignore: parentDir.UseGitignore,
+			Recursive:    false, // Do NOT recurse further
+		}
+
+		result = append(result, subdirSync)
+	}
+
+	return result, nil
 }
 
 // buildExcludeConfig builds exclude configuration for a custom directory

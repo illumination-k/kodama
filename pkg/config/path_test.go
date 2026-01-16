@@ -125,6 +125,24 @@ func TestCustomDirSync_Validate(t *testing.T) {
 			},
 			wantError: true,
 		},
+		{
+			name: "recursive with file source",
+			customDir: CustomDirSync{
+				Source:      tmpFile,
+				Destination: "/root/.config",
+				Recursive:   true,
+			},
+			wantError: true,
+		},
+		{
+			name: "recursive with directory source",
+			customDir: CustomDirSync{
+				Source:      tmpDir,
+				Destination: "/root/.config",
+				Recursive:   true,
+			},
+			wantError: false,
+		},
 	}
 
 	for _, tt := range tests {
