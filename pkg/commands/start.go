@@ -195,7 +195,10 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		}
 	}
 
-	// 5. Validate that either sync or repo is provided
+	// 5. Validate mutual exclusivity between --repo and --sync
+	if syncEnabled && repo != "" {
+		return fmt.Errorf("cannot use both --sync and --repo. Choose one mode per session")
+	}
 	if !syncEnabled && repo == "" {
 		return fmt.Errorf("either --sync or --repo must be specified. Use --sync to sync local files, or --repo to clone a git repository")
 	}
@@ -316,6 +319,13 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		effectiveGitSecret = session.GitSecret
 	}
 
+	// Determine branch name for init container (if repo mode)
+	effectiveBranch := branch
+	if repo != "" && effectiveBranch == "" {
+		// Generate default branch name if not specified
+		effectiveBranch = fmt.Sprintf("kodama/%s", name)
+	}
+
 	podSpec := &kubernetes.PodSpec{
 		Name:                session.PodName,
 		Namespace:           namespace,
@@ -325,6 +335,13 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		GitSecretName:       effectiveGitSecret,
 		EditorConfigMapName: configMapName,
 		Command:             []string{"sleep", "infinity"},
+
+		// Git configuration for workspace-initializer init container
+		GitRepo:         repo,
+		GitBranch:       effectiveBranch,
+		GitCloneDepth:   cloneDepth,
+		GitSingleBranch: singleBranch,
+		GitCloneArgs:    gitCloneArgs,
 	}
 
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {
@@ -334,129 +351,30 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	}
 	fmt.Println("✓ Pod created")
 
-	// 10. Wait for pod ready
-	fmt.Println("⏳ Waiting for pod to be ready...")
+	// 10. Wait for pod ready (including init containers)
+	if repo != "" {
+		fmt.Printf("⏳ Waiting for init containers (installing Claude Code and cloning repository: %s)...\n", repo)
+	} else {
+		fmt.Println("⏳ Waiting for init containers (installing Claude Code)...")
+	}
 	if err := k8sClient.WaitForPodReady(ctx, session.PodName, namespace, 5*time.Minute); err != nil {
 		session.UpdateStatus(config.StatusFailed)
 		_ = store.SaveSession(session) // Best effort update
-		return fmt.Errorf("pod failed to start: %w\n\nTroubleshooting:\n  kubectl logs %s -n %s\n  kubectl describe pod %s -n %s\n\nCleanup: kubectl kodama delete %s",
-			err, session.PodName, namespace, session.PodName, namespace, name)
+		return fmt.Errorf("pod failed to start: %w\n\nTroubleshooting:\n  kubectl logs %s -c claude-installer -n %s\n  kubectl logs %s -c workspace-initializer -n %s\n  kubectl describe pod %s -n %s\n\nCleanup: kubectl kodama delete %s",
+			err, session.PodName, namespace, session.PodName, namespace, session.PodName, namespace, name)
 	}
-	fmt.Println("✓ Pod is ready")
+	fmt.Println("✓ Init containers completed")
 
-	// 11. Clone git repository (if repo is specified and sync is disabled)
-	if !syncEnabled && repo != "" {
-		fmt.Printf("⏳ Cloning repository: %s...\n", repo)
-
-		gitMgr := git.NewGitManager()
-
-		// Get GitHub token from environment or global config
-		token := os.Getenv("GITHUB_TOKEN")
-		// Note: if globalConfig.Git.SecretName is set, token is available in pod via GH_TOKEN env var
-		// The git clone command will use the token injected in the URL
-
-		// Build clone options from session config
-		cloneOpts := &git.CloneOptions{
-			Branch:       branch,
-			Depth:        session.GitClone.Depth,
-			SingleBranch: session.GitClone.SingleBranch,
-			ExtraArgs:    session.GitClone.ExtraArgs,
-		}
-
-		if err := gitMgr.CloneWithOptions(ctx, namespace, session.PodName, repo, token, cloneOpts); err != nil {
-			session.UpdateStatus(config.StatusFailed)
-			_ = store.SaveSession(session)
-			return fmt.Errorf("failed to clone repository: %w\n\nTroubleshooting:\n  - Verify repository URL is correct\n  - Check authentication if private repo (use GITHUB_TOKEN env var or configure git.secretName in ~/.kodama/config.yaml)\n  - Ensure pod has network access\n  - View logs: kubectl logs %s -n %s\n\nCleanup: kubectl kodama delete %s",
-				err, session.PodName, namespace, name)
-		}
-
-		fmt.Println("✓ Repository cloned")
-
-		// 11.1 Handle automatic branch creation/checkout
-		currentBranch, branchErr := gitMgr.GetCurrentBranch(ctx, namespace, session.PodName)
-		if branchErr != nil {
-			// Log warning but don't fail - branch management is optional
-			fmt.Printf("⚠️  Warning: Could not determine current branch: %v\n", branchErr)
-			fmt.Println("   Continuing with current state.")
-		} else {
-			// Determine target branch
-			var targetBranch string
-			var needsNewBranch bool
-
-			switch {
-			case branch != "" && git.IsMainBranch(branch):
-				// User specified a main branch - auto-create new branch instead
-				fmt.Printf("⚠️  Main branch '%s' detected - creating feature branch instead\n", branch)
-				targetBranch = git.GenerateBranchName(globalConfig.Defaults.BranchPrefix, name)
-				needsNewBranch = true
-			case branch == "" && git.IsMainBranch(currentBranch):
-				// No branch specified and cloned default is main - create new branch
-				fmt.Printf("⚠️  Repository default branch '%s' is protected - creating feature branch\n", currentBranch)
-				targetBranch = git.GenerateBranchName(globalConfig.Defaults.BranchPrefix, name)
-				needsNewBranch = true
-			case branch != "" && branch != currentBranch:
-				// User specified a non-main branch - try to check it out
-				targetBranch = branch
-				needsNewBranch = false
-			default:
-				// Already on the correct branch (user-specified non-main)
-				targetBranch = currentBranch
-				needsNewBranch = false
-			}
-
-			// Handle branch creation or checkout if needed
-			if targetBranch != currentBranch {
-				fmt.Printf("⏳ Setting up branch: %s...\n", targetBranch)
-
-				// Check if branch exists
-				localExists, remoteExists, checkErr := gitMgr.BranchExists(ctx, namespace, session.PodName, targetBranch)
-				switch {
-				case checkErr != nil:
-					fmt.Printf("⚠️  Warning: Could not check branch existence: %v\n", checkErr)
-					fmt.Println("   Continuing with current branch.")
-				case remoteExists:
-					// Checkout existing remote branch
-					if checkoutErr := gitMgr.CheckoutBranch(ctx, namespace, session.PodName, targetBranch); checkoutErr != nil {
-						fmt.Printf("⚠️  Warning: Could not checkout remote branch '%s': %v\n", targetBranch, checkoutErr)
-						fmt.Println("   Continuing with current branch.")
-					} else {
-						fmt.Printf("✓ Checked out existing remote branch: %s\n", targetBranch)
-						currentBranch = targetBranch
-					}
-				case localExists:
-					// Checkout existing local branch
-					if checkoutErr := gitMgr.CheckoutBranch(ctx, namespace, session.PodName, targetBranch); checkoutErr != nil {
-						fmt.Printf("⚠️  Warning: Could not checkout branch '%s': %v\n", targetBranch, checkoutErr)
-						fmt.Println("   Continuing with current branch.")
-					} else {
-						fmt.Printf("✓ Checked out existing branch: %s\n", targetBranch)
-						currentBranch = targetBranch
-					}
-				case needsNewBranch || !localExists:
-					// Create new branch (either for main protection or user-specified branch doesn't exist)
-					if createErr := gitMgr.CreateBranch(ctx, namespace, session.PodName, targetBranch); createErr != nil {
-						fmt.Printf("⚠️  Warning: Could not create branch '%s': %v\n", targetBranch, createErr)
-						fmt.Println("   Continuing with current branch.")
-					} else {
-						fmt.Printf("✓ Created new branch: %s\n", targetBranch)
-						currentBranch = targetBranch
-					}
-				}
-			}
-		}
-
-		// Store git metadata in session
+	// Store git metadata in session if repo mode
+	if repo != "" {
 		session.Repo = repo
-		session.Branch = currentBranch // Use actual checked-out branch, not requested branch
-		currentCommit, commitErr := gitMgr.GetCurrentCommit(ctx, namespace, session.PodName)
-		if commitErr == nil {
-			session.CommitHash = currentCommit
-		}
+		session.Branch = effectiveBranch
+		// Note: Commit hash will be populated if needed via git operations in the pod later
 	}
 
-	// 12. Perform initial sync (if enabled)
+	// 11. Perform initial sync (if enabled) - runs AFTER init containers complete
 	if syncEnabled {
-		fmt.Printf("⏳ Performing initial sync: %s → pod...\n", resolvedSyncPath)
+		fmt.Printf("⏳ Syncing local files: %s → pod...\n", resolvedSyncPath)
 
 		syncMgr := sync.NewSyncManager()
 

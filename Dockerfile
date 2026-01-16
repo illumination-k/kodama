@@ -37,10 +37,8 @@ RUN HELIX_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64")
 # Setup Helix runtime environment
 ENV HELIX_RUNTIME=/usr/local/lib/helix/runtime
 
-# Install Claude Code CLI
-ENV PATH="/root/.local/bin:${PATH}"
-RUN curl -fsSL https://claude.ai/install.sh | bash -s latest && \
-    claude --version || echo "Claude Code installed, authentication required"
+# Note: Claude Code is now installed via init container
+# This reduces image size and allows version updates without rebuilding
 
 # Create workspace directory
 RUN mkdir -p /workspace
