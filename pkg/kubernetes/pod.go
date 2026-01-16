@@ -359,6 +359,67 @@ func (c *Client) DeletePod(ctx context.Context, name, namespace string) error {
 	return nil
 }
 
+// WaitForPodDeleted waits for a pod to be fully deleted from the cluster
+func (c *Client) WaitForPodDeleted(ctx context.Context, name, namespace string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// First check if pod already doesn't exist
+	_, err := c.clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Pod already deleted
+			return nil
+		}
+		// Some other error occurred
+		return fmt.Errorf("failed to check pod status: %w", err)
+	}
+
+	// Use watch interface to wait for deletion
+	watcher, err := c.clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to watch pod %s: %w", name, err)
+	}
+	defer watcher.Stop()
+
+	for {
+		select {
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				// Watch channel closed - verify pod is deleted
+				_, err := c.clientset.CoreV1().Pods(namespace).Get(context.Background(), name, metav1.GetOptions{})
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return fmt.Errorf("watch channel closed but pod %s still exists", name)
+			}
+
+			if event.Type == watch.Deleted {
+				// Pod has been deleted
+				return nil
+			}
+
+			if event.Type == watch.Error {
+				return fmt.Errorf("watch error for pod %s", name)
+			}
+
+		case <-ctx.Done():
+			// Timeout - check current pod status
+			pod, err := c.clientset.CoreV1().Pods(namespace).Get(context.Background(), name, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				// Pod was deleted just as we timed out
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("pod %s deletion timeout after %v: %w", name, timeout, err)
+			}
+			return fmt.Errorf("pod %s was not deleted within %v, current phase: %s", name, timeout, pod.Status.Phase)
+		}
+	}
+}
+
 // GetPodIP returns the pod's IP address for verification
 func (c *Client) GetPodIP(ctx context.Context, name, namespace string) (string, error) {
 	status, err := c.GetPod(ctx, name, namespace)
