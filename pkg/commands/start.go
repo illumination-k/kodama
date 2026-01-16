@@ -108,11 +108,6 @@ func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, names
 func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
 	ctx := context.Background()
 
-	// Auto-enable --no-sync when --repo is specified
-	if repo != "" {
-		noSync = true
-	}
-
 	// 1. Load global config for defaults
 	store, err := config.NewStore()
 	if err != nil {
@@ -214,6 +209,11 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		if repo == "" && templateConfig.Repo != "" {
 			repo = templateConfig.Repo
 		}
+	}
+
+	// Auto-enable --no-sync when repo is specified (either via CLI or template)
+	if repo != "" {
+		noSync = true
 	}
 
 	// Layer 3: CLI flags (already set, highest priority - no override needed)
