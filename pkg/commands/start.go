@@ -124,8 +124,21 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		return fmt.Errorf("failed to load global config: %w", err)
 	}
 
-	// 1.5 Load session template config if specified
+	// 1.5 Load session template config if specified or found in current directory
 	var templateConfig *config.SessionConfig
+
+	// Auto-detect .kodama.yaml in current directory if --config not specified
+	if configFile == "" {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr == nil {
+			candidatePath := fmt.Sprintf("%s/.kodama.yaml", cwd)
+			if _, statErr := os.Stat(candidatePath); statErr == nil {
+				configFile = candidatePath
+				fmt.Printf("📄 Found .kodama.yaml in current directory\n")
+			}
+		}
+	}
+
 	if configFile != "" {
 		fmt.Printf("Loading session template from: %s\n", configFile)
 		var loadedTemplate *config.SessionConfig
@@ -281,6 +294,9 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		}
 		if templateConfig.Sync.UseGitignore != nil {
 			session.Sync.UseGitignore = templateConfig.Sync.UseGitignore
+		}
+		if len(templateConfig.Sync.CustomDirs) > 0 {
+			session.Sync.CustomDirs = templateConfig.Sync.CustomDirs
 		}
 		if templateConfig.ClaudeAuth != nil {
 			session.ClaudeAuth = templateConfig.ClaudeAuth
@@ -440,6 +456,15 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 			fmt.Println("✓ Initial sync completed")
 			fmt.Println("   Tip: Use 'kubectl kodama attach --sync' for live sync during development")
 		}
+
+		// Sync custom directories (dotfiles, configs, etc.)
+		customDirs := determineCustomDirs(globalConfig, session)
+		if len(customDirs) > 0 {
+			customSyncMgr := sync.NewCustomDirSyncManager(syncMgr)
+			if err := customSyncMgr.SyncCustomDirs(ctx, customDirs, namespace, session.PodName, globalConfig); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to sync custom directories: %v\n", err)
+			}
+		}
 	}
 
 	// 12. Update status to Running and save
@@ -504,6 +529,16 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	// Mark start as successful to skip cleanup
 	startSucceeded = true
 	return nil
+}
+
+// determineCustomDirs returns the custom directories to sync
+// Session-level custom dirs completely override global custom dirs
+func determineCustomDirs(globalCfg *config.GlobalConfig, sessionCfg *config.SessionConfig) []config.CustomDirSync {
+	// Session custom dirs override global custom dirs
+	if len(sessionCfg.Sync.CustomDirs) > 0 {
+		return sessionCfg.Sync.CustomDirs
+	}
+	return globalCfg.Sync.CustomDirs
 }
 
 // buildExcludeConfig creates exclude.Config from global and session configs

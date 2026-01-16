@@ -79,11 +79,12 @@ type GitCloneConfig struct {
 
 // SyncConfig holds configuration for file synchronization
 type SyncConfig struct {
-	UseGitignore   *bool    `yaml:"useGitignore,omitempty"`
-	LocalPath      string   `yaml:"localPath,omitempty"`
-	MutagenSession string   `yaml:"mutagenSession,omitempty"`
-	Exclude        []string `yaml:"exclude,omitempty"`
-	Enabled        bool     `yaml:"enabled"`
+	UseGitignore   *bool           `yaml:"useGitignore,omitempty"`
+	LocalPath      string          `yaml:"localPath,omitempty"`
+	MutagenSession string          `yaml:"mutagenSession,omitempty"`
+	Exclude        []string        `yaml:"exclude,omitempty"`
+	CustomDirs     []CustomDirSync `yaml:"customDirs,omitempty"`
+	Enabled        bool            `yaml:"enabled"`
 }
 
 // ResourceConfig holds resource limit configuration

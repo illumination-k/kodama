@@ -25,15 +25,15 @@ func createClaudeInstallerInitContainer() corev1.Container {
 echo "Installing Claude Code CLI..."
 apt-get update -qq && apt-get install -y -qq curl ca-certificates
 curl -fsSL https://claude.ai/install.sh | bash -s latest
-echo "Copying binaries to shared volume..."
-mkdir -p /claude-bin
-cp -r /root/.local/bin/* /claude-bin/
+echo "Copying binaries to /kodama/bin..."
+mkdir -p /kodama/bin
+cp -r /root/.local/bin/* /kodama/bin/
 echo "Claude Code installation complete"`,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "claude-bin",
-				MountPath: "/claude-bin",
+				Name:      "kodama-bin",
+				MountPath: "/kodama/bin",
 			},
 		},
 	}
@@ -124,11 +124,11 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		},
 	}
 
-	// Add PATH environment variable to include claude-bin
+	// Add PATH environment variable to include kodama-bin (contains Claude Code and other tools)
 	pod.Spec.Containers[0].Env = []corev1.EnvVar{
 		{
 			Name:  "PATH",
-			Value: "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			Value: "/kodama/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		},
 	}
 
@@ -154,9 +154,9 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 
 	// Build volumes and volume mounts
 	volumes := []corev1.Volume{
-		// Claude bin volume (emptyDir) - always included
+		// Kodama bin volume - for Claude Code and kodama-specific tools
 		{
-			Name: "claude-bin",
+			Name: "kodama-bin",
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -164,11 +164,10 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		// Claude bin mount - always included
+		// Kodama bin mount - contains Claude Code and allows runtime tool installations
 		{
-			Name:      "claude-bin",
-			MountPath: "/root/.local/bin",
-			ReadOnly:  true,
+			Name:      "kodama-bin",
+			MountPath: "/kodama/bin",
 		},
 	}
 

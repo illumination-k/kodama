@@ -2,3 +2,4 @@
 bin/
 kodama
 kubectl-kodama
+.kodama.yaml

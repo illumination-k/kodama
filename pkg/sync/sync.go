@@ -12,6 +12,9 @@ type SyncManager interface {
 	// InitialSync performs one-time sync from local to pod
 	InitialSync(ctx context.Context, localPath, namespace, podName string, excludeCfg *exclude.Config) error
 
+	// InitialSyncToCustomPath performs one-time sync from local to custom path in pod
+	InitialSyncToCustomPath(ctx context.Context, localPath, remotePath, namespace, podName string, excludeCfg *exclude.Config) error
+
 	// Start creates a continuous sync session (for attach --sync)
 	Start(ctx context.Context, sessionName, localPath, namespace, podName string, excludeCfg *exclude.Config) error
 

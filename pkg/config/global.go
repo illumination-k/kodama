@@ -61,8 +61,9 @@ type FileAuthConfig struct {
 
 // GlobalSyncConfig holds global sync-related configuration
 type GlobalSyncConfig struct {
-	UseGitignore *bool    `yaml:"useGitignore,omitempty"`
-	Exclude      []string `yaml:"exclude,omitempty"`
+	UseGitignore *bool           `yaml:"useGitignore,omitempty"`
+	Exclude      []string        `yaml:"exclude,omitempty"`
+	CustomDirs   []CustomDirSync `yaml:"customDirs,omitempty"`
 }
 
 // DefaultGlobalConfig returns a GlobalConfig with sensible defaults
@@ -121,5 +122,8 @@ func (g *GlobalConfig) Merge(other *GlobalConfig) {
 	}
 	if other.Sync.UseGitignore != nil {
 		g.Sync.UseGitignore = other.Sync.UseGitignore
+	}
+	if len(other.Sync.CustomDirs) > 0 {
+		g.Sync.CustomDirs = other.Sync.CustomDirs
 	}
 }
