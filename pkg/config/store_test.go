@@ -241,3 +241,133 @@ func TestStore_SaveSession_ValidationError(t *testing.T) {
 	err := store.SaveSession(session)
 	assert.Error(t, err)
 }
+
+func TestStore_LoadSessionTemplate(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFile   func(dir string) string
+		expectError bool
+		validate    func(t *testing.T, config *SessionConfig)
+	}{
+		{
+			name: "valid template with partial config",
+			setupFile: func(dir string) string {
+				path := filepath.Join(dir, "template.yaml")
+				content := `image: test-image:latest
+resources:
+  cpu: "2"
+  memory: "4Gi"
+`
+				err := os.WriteFile(path, []byte(content), 0o600)
+				require.NoError(t, err)
+				return path
+			},
+			expectError: false,
+			validate: func(t *testing.T, config *SessionConfig) {
+				assert.Equal(t, "test-image:latest", config.Image)
+				assert.Equal(t, "2", config.Resources.CPU)
+				assert.Equal(t, "4Gi", config.Resources.Memory)
+			},
+		},
+		{
+			name: "valid template with full config",
+			setupFile: func(dir string) string {
+				path := filepath.Join(dir, "full-template.yaml")
+				content := `namespace: dev
+image: python:3.11
+repo: https://github.com/test/repo
+branch: develop
+gitSecret: test-secret
+gitClone:
+  depth: 1
+  singleBranch: true
+  extraArgs: "--recurse-submodules"
+resources:
+  cpu: "4"
+  memory: "8Gi"
+sync:
+  useGitignore: true
+  exclude:
+    - "*.pyc"
+    - ".venv"
+`
+				err := os.WriteFile(path, []byte(content), 0o600)
+				require.NoError(t, err)
+				return path
+			},
+			expectError: false,
+			validate: func(t *testing.T, config *SessionConfig) {
+				assert.Equal(t, "dev", config.Namespace)
+				assert.Equal(t, "python:3.11", config.Image)
+				assert.Equal(t, "https://github.com/test/repo", config.Repo)
+				assert.Equal(t, "develop", config.Branch)
+				assert.Equal(t, "test-secret", config.GitSecret)
+				assert.Equal(t, 1, config.GitClone.Depth)
+				assert.True(t, config.GitClone.SingleBranch)
+				assert.Equal(t, "--recurse-submodules", config.GitClone.ExtraArgs)
+				assert.Equal(t, "4", config.Resources.CPU)
+				assert.Equal(t, "8Gi", config.Resources.Memory)
+				assert.NotNil(t, config.Sync.UseGitignore)
+				assert.True(t, *config.Sync.UseGitignore)
+				assert.Equal(t, []string{"*.pyc", ".venv"}, config.Sync.Exclude)
+			},
+		},
+		{
+			name: "missing file",
+			setupFile: func(dir string) string {
+				return filepath.Join(dir, "nonexistent.yaml")
+			},
+			expectError: true,
+			validate:    nil,
+		},
+		{
+			name: "invalid YAML",
+			setupFile: func(dir string) string {
+				path := filepath.Join(dir, "invalid.yaml")
+				content := "invalid: yaml: content:"
+				err := os.WriteFile(path, []byte(content), 0o600)
+				require.NoError(t, err)
+				return path
+			},
+			expectError: true,
+			validate:    nil,
+		},
+		{
+			name: "empty file",
+			setupFile: func(dir string) string {
+				path := filepath.Join(dir, "empty.yaml")
+				err := os.WriteFile(path, []byte(""), 0o600)
+				require.NoError(t, err)
+				return path
+			},
+			expectError: false,
+			validate: func(t *testing.T, config *SessionConfig) {
+				// Empty template should return zero-value config
+				assert.Empty(t, config.Name)
+				assert.Empty(t, config.Namespace)
+				assert.Empty(t, config.Image)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			store := NewStoreWithPath(tmpDir)
+
+			path := tt.setupFile(tmpDir)
+			config, err := store.LoadSessionTemplate(path)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, config)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, config)
+				if tt.validate != nil {
+					tt.validate(t, config)
+				}
+			}
+		})
+	}
+}

@@ -53,6 +53,9 @@ type SessionConfig struct {
 	WorkspacePVC    string              `yaml:"workspacePVC"`
 	ClaudeHomePVC   string              `yaml:"claudeHomePVC"`
 	CommitHash      string              `yaml:"commitHash,omitempty"`
+	Image           string              `yaml:"image,omitempty"`
+	GitSecret       string              `yaml:"gitSecret,omitempty"`
+	GitClone        GitCloneConfig      `yaml:"gitClone,omitempty"`
 	Status          SessionStatus       `yaml:"status"`
 	AutoBranch      bool                `yaml:"autoBranch,omitempty"`
 	ClaudeAuth      *ClaudeAuthOverride `yaml:"claudeAuth,omitempty"`
@@ -65,6 +68,13 @@ type ClaudeAuthOverride struct {
 	AuthType   string `yaml:"authType,omitempty"`   // Override global auth type
 	SecretName string `yaml:"secretName,omitempty"` // Override secret name
 	Profile    string `yaml:"profile,omitempty"`    // Override file auth profile
+}
+
+// GitCloneConfig holds git clone options
+type GitCloneConfig struct {
+	Depth        int    `yaml:"depth,omitempty"`        // Shallow clone depth (0 = full)
+	SingleBranch bool   `yaml:"singleBranch,omitempty"` // Clone only single branch
+	ExtraArgs    string `yaml:"extraArgs,omitempty"`    // Additional git clone arguments
 }
 
 // SyncConfig holds configuration for file synchronization

@@ -1,0 +1,6 @@
+# Minimal Template Example
+# Shows how you can specify just one or two fields
+# All other values will use global config or CLI flags
+
+# Just override the image
+image: alpine:latest

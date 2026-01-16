@@ -18,15 +18,21 @@ import (
 // NewStartCommand creates a new start command
 func NewStartCommand() *cobra.Command {
 	var (
-		repo       string
-		syncPath   string
-		namespace  string
-		cpu        string
-		memory     string
-		branch     string
-		noSync     bool
-		prompt     string
-		promptFile string
+		repo         string
+		syncPath     string
+		namespace    string
+		cpu          string
+		memory       string
+		branch       string
+		noSync       bool
+		prompt       string
+		promptFile   string
+		image        string
+		gitSecret    string
+		cloneDepth   int
+		singleBranch bool
+		gitCloneArgs string
+		configFile   string
 	)
 
 	cmd := &cobra.Command{
@@ -48,7 +54,7 @@ Examples:
 			}
 
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
-			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, noSync, kubeconfigPath, prompt, promptFile)
+			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, noSync, kubeconfigPath, prompt, promptFile, image, gitSecret, cloneDepth, singleBranch, gitCloneArgs, configFile)
 		},
 	}
 
@@ -62,11 +68,17 @@ Examples:
 	cmd.Flags().BoolVar(&noSync, "no-sync", false, "Disable file synchronization")
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
+	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
+	cmd.Flags().StringVar(&gitSecret, "git-secret", "", "Kubernetes secret name for git credentials (overrides global default)")
+	cmd.Flags().IntVar(&cloneDepth, "clone-depth", 0, "Create a shallow clone with specified depth (0 = full clone)")
+	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
+	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")
+	cmd.Flags().StringVar(&configFile, "config", "", "Path to session template config file")
 
 	return cmd
 }
 
-func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile string) error {
+func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
 	ctx := context.Background()
 
 	// 1. Load global config for defaults
@@ -78,6 +90,19 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	globalConfig, err := store.LoadGlobalConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load global config: %w", err)
+	}
+
+	// 1.5 Load session template config if specified
+	var templateConfig *config.SessionConfig
+	if configFile != "" {
+		fmt.Printf("Loading session template from: %s\n", configFile)
+		var loadedTemplate *config.SessionConfig
+		loadedTemplate, err = store.LoadSessionTemplate(configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load session template: %w", err)
+		}
+		templateConfig = loadedTemplate
+		fmt.Println("✓ Template loaded")
 	}
 
 	// 2. Check if session already exists
@@ -92,19 +117,65 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		}
 	}
 
-	// 3. Apply defaults from global config and flags
+	// 3. Apply defaults with 4-tier priority merge
+	// Priority: CLI flags > Template config > Global config > Hardcoded defaults
+
+	// Layer 1: Apply global config defaults (if CLI flag is empty)
 	if namespace == "" {
 		namespace = globalConfig.Defaults.Namespace
 	}
-	if namespace == "" {
-		return fmt.Errorf("namespace is required. Specify via --namespace flag or set default in ~/.kodama/config.yaml")
-	}
-
 	if cpu == "" {
 		cpu = globalConfig.Defaults.Resources.CPU
 	}
 	if memory == "" {
 		memory = globalConfig.Defaults.Resources.Memory
+	}
+	if image == "" {
+		image = globalConfig.Defaults.Image
+	}
+	if gitSecret == "" {
+		gitSecret = globalConfig.Git.SecretName
+	}
+
+	// Layer 2: Apply template config (if --config specified and CLI flag is empty)
+	if templateConfig != nil {
+		if namespace == "" && templateConfig.Namespace != "" {
+			namespace = templateConfig.Namespace
+		}
+		if cpu == "" && templateConfig.Resources.CPU != "" {
+			cpu = templateConfig.Resources.CPU
+		}
+		if memory == "" && templateConfig.Resources.Memory != "" {
+			memory = templateConfig.Resources.Memory
+		}
+		if image == "" && templateConfig.Image != "" {
+			image = templateConfig.Image
+		}
+		if gitSecret == "" && templateConfig.GitSecret != "" {
+			gitSecret = templateConfig.GitSecret
+		}
+		if branch == "" && templateConfig.Branch != "" {
+			branch = templateConfig.Branch
+		}
+		if cloneDepth == 0 && templateConfig.GitClone.Depth > 0 {
+			cloneDepth = templateConfig.GitClone.Depth
+		}
+		if !singleBranch && templateConfig.GitClone.SingleBranch {
+			singleBranch = templateConfig.GitClone.SingleBranch
+		}
+		if gitCloneArgs == "" && templateConfig.GitClone.ExtraArgs != "" {
+			gitCloneArgs = templateConfig.GitClone.ExtraArgs
+		}
+		if repo == "" && templateConfig.Repo != "" {
+			repo = templateConfig.Repo
+		}
+	}
+
+	// Layer 3: CLI flags (already set, highest priority - no override needed)
+
+	// Validate required fields after merge
+	if namespace == "" {
+		return fmt.Errorf("namespace is required. Specify via --namespace flag, template config, or set default in ~/.kodama/config.yaml")
 	}
 
 	// 4. Determine sync path
@@ -129,13 +200,31 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		return fmt.Errorf("either --sync or --repo must be specified. Use --sync to sync local files, or --repo to clone a git repository")
 	}
 
-	// 5. Create session config
+	// 6. Validate clone options
+	if cloneDepth < 0 {
+		return fmt.Errorf("clone depth must be non-negative (got %d)", cloneDepth)
+	}
+
+	if gitCloneArgs != "" {
+		if validateErr := git.ValidateCloneArgs(gitCloneArgs); validateErr != nil {
+			return fmt.Errorf("invalid git clone arguments: %w", validateErr)
+		}
+	}
+
+	// 7. Create session config
 	now := time.Now()
 	session := &config.SessionConfig{
-		Name:       name,
-		Namespace:  namespace,
-		Repo:       repo,
-		PodName:    fmt.Sprintf("kodama-%s", name),
+		Name:      name,
+		Namespace: namespace,
+		Repo:      repo,
+		PodName:   fmt.Sprintf("kodama-%s", name),
+		Image:     image,
+		GitSecret: gitSecret,
+		GitClone: config.GitCloneConfig{
+			Depth:        cloneDepth,
+			SingleBranch: singleBranch,
+			ExtraArgs:    gitCloneArgs,
+		},
 		Status:     config.StatusPending,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -148,6 +237,19 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 			Enabled:   syncEnabled,
 			LocalPath: resolvedSyncPath,
 		},
+	}
+
+	// Merge any additional template config fields not handled by CLI flags
+	if templateConfig != nil {
+		if len(templateConfig.Sync.Exclude) > 0 {
+			session.Sync.Exclude = templateConfig.Sync.Exclude
+		}
+		if templateConfig.Sync.UseGitignore != nil {
+			session.Sync.UseGitignore = templateConfig.Sync.UseGitignore
+		}
+		if templateConfig.ClaudeAuth != nil {
+			session.ClaudeAuth = templateConfig.ClaudeAuth
+		}
 	}
 
 	// Validate session
@@ -194,13 +296,33 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 
 	// 10. Create pod
 	fmt.Println("⏳ Creating pod...")
+
+	// Determine which image to use: session config > global default
+	effectiveImage := globalConfig.Defaults.Image
+	if session.Image != "" {
+		effectiveImage = session.Image
+	}
+
+	// Validate image
+	if effectiveImage == "" {
+		session.UpdateStatus(config.StatusFailed)
+		_ = store.SaveSession(session)
+		return fmt.Errorf("container image is required. Specify via --image flag or set default in ~/.kodama/config.yaml")
+	}
+
+	// Determine which git secret to use: session config > global default
+	effectiveGitSecret := globalConfig.Git.SecretName
+	if session.GitSecret != "" {
+		effectiveGitSecret = session.GitSecret
+	}
+
 	podSpec := &kubernetes.PodSpec{
 		Name:                session.PodName,
 		Namespace:           namespace,
-		Image:               globalConfig.Defaults.Image,
+		Image:               effectiveImage,
 		CPULimit:            cpu,
 		MemoryLimit:         memory,
-		GitSecretName:       globalConfig.Git.SecretName,
+		GitSecretName:       effectiveGitSecret,
 		EditorConfigMapName: configMapName,
 		Command:             []string{"sleep", "infinity"},
 	}
@@ -233,7 +355,15 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		// Note: if globalConfig.Git.SecretName is set, token is available in pod via GH_TOKEN env var
 		// The git clone command will use the token injected in the URL
 
-		if err := gitMgr.Clone(ctx, namespace, session.PodName, repo, branch, token); err != nil {
+		// Build clone options from session config
+		cloneOpts := &git.CloneOptions{
+			Branch:       branch,
+			Depth:        session.GitClone.Depth,
+			SingleBranch: session.GitClone.SingleBranch,
+			ExtraArgs:    session.GitClone.ExtraArgs,
+		}
+
+		if err := gitMgr.CloneWithOptions(ctx, namespace, session.PodName, repo, token, cloneOpts); err != nil {
 			session.UpdateStatus(config.StatusFailed)
 			_ = store.SaveSession(session)
 			return fmt.Errorf("failed to clone repository: %w\n\nTroubleshooting:\n  - Verify repository URL is correct\n  - Check authentication if private repo (use GITHUB_TOKEN env var or configure git.secretName in ~/.kodama/config.yaml)\n  - Ensure pod has network access\n  - View logs: kubectl logs %s -n %s\n\nCleanup: kubectl kodama delete %s",

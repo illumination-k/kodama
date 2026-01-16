@@ -1,0 +1,23 @@
+# Node.js Development Template
+# Usage: kubectl kodama start my-session --config examples/.kodama/templates/nodejs-dev.yaml --sync ~/my-project
+
+# Container image with Node.js
+image: node:20-alpine
+
+# Namespace (optional)
+namespace: dev
+
+# Resources
+resources:
+  cpu: "2"
+  memory: "4Gi"
+
+# Sync configuration
+sync:
+  useGitignore: true
+  exclude:
+    - "node_modules"
+    - ".npm"
+    - "dist"
+    - "build"
+    - "*.log"
