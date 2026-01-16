@@ -37,7 +37,7 @@ RUN HELIX_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64")
 # Setup Helix runtime environment
 ENV HELIX_RUNTIME=/usr/local/lib/helix/runtime
 
-# Note: Claude Code is now installed via init container
+# Note: Claude Code is now installed via init container to /kodama/bin
 # This reduces image size and allows version updates without rebuilding
 
 # Create workspace directory
