@@ -1,0 +1,21 @@
+# Repository-Specific Template
+# Usage: kubectl kodama start fix-123 --config examples/.kodama/templates/repo-specific.yaml
+
+# Git repository configuration
+repo: https://github.com/myorg/myrepo
+branch: develop
+gitSecret: github-enterprise-token
+
+# Git clone options
+gitClone:
+  depth: 1               # Shallow clone
+  singleBranch: true     # Only clone the specified branch
+  extraArgs: "--recurse-submodules"  # Include submodules
+
+# Resources
+resources:
+  cpu: "2"
+  memory: "4Gi"
+
+# Namespace
+namespace: dev

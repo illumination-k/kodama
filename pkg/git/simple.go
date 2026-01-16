@@ -31,6 +31,15 @@ func NewGitManagerWithExecutor(executor kubernetes.CommandExecutor) GitManager {
 
 // Clone clones a git repository into the pod's /workspace directory
 func (s *simpleGitManager) Clone(ctx context.Context, namespace, podName, repoURL, branch, token string) error {
+	// Use CloneWithOptions with basic options
+	opts := &CloneOptions{
+		Branch: branch,
+	}
+	return s.CloneWithOptions(ctx, namespace, podName, repoURL, token, opts)
+}
+
+// CloneWithOptions clones a git repository with advanced options
+func (s *simpleGitManager) CloneWithOptions(ctx context.Context, namespace, podName, repoURL, token string, opts *CloneOptions) error {
 	// Ensure git is installed
 	if err := s.ensureGitInstalled(ctx, namespace, podName); err != nil {
 		return fmt.Errorf("failed to ensure git is installed: %w", err)
@@ -41,9 +50,35 @@ func (s *simpleGitManager) Clone(ctx context.Context, namespace, podName, repoUR
 
 	// Build git clone command
 	args := []string{"git", "clone"}
-	if branch != "" {
-		args = append(args, "--branch", branch)
+
+	// Add depth option for shallow clone
+	if opts != nil && opts.Depth > 0 {
+		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
 	}
+
+	// Add single-branch option
+	if opts != nil && opts.SingleBranch {
+		args = append(args, "--single-branch")
+	}
+
+	// Add branch option
+	if opts != nil && opts.Branch != "" {
+		args = append(args, "--branch", opts.Branch)
+	}
+
+	// Add extra arguments (parse from string)
+	if opts != nil && opts.ExtraArgs != "" {
+		// Validate args for safety
+		if err := ValidateCloneArgs(opts.ExtraArgs); err != nil {
+			return fmt.Errorf("invalid git clone arguments: %w", err)
+		}
+
+		// Parse extra args (simple split by space)
+		extraArgs := strings.Fields(opts.ExtraArgs)
+		args = append(args, extraArgs...)
+	}
+
+	// Add repository URL and target directory
 	args = append(args, cloneURL, "/workspace")
 
 	// Execute in pod
@@ -55,6 +90,28 @@ func (s *simpleGitManager) Clone(ctx context.Context, namespace, podName, repoUR
 			sanitizedErr = sanitizeError(stdout, token)
 		}
 		return fmt.Errorf("git clone failed: %s: %w", sanitizedErr, err)
+	}
+
+	return nil
+}
+
+// ValidateCloneArgs performs basic validation on extra git clone arguments
+// to prevent command injection or dangerous options
+func ValidateCloneArgs(args string) error {
+	if args == "" {
+		return nil
+	}
+
+	// Disallow dangerous patterns
+	dangerousPatterns := []string{
+		"|", "&&", "||", ";", "`", "$(", // Command injection
+		"--upload-pack", "--config", // Potentially dangerous git options
+	}
+
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(args, pattern) {
+			return fmt.Errorf("git clone args contain disallowed pattern: %s", pattern)
+		}
 	}
 
 	return nil

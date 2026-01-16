@@ -1,0 +1,23 @@
+# Python Development Template
+# Usage: kubectl kodama start my-session --config examples/.kodama/templates/python-dev.yaml --sync ~/my-project
+
+# Container image with Python
+image: ghcr.io/illumination-k/kodama:python-3.11
+
+# Namespace (optional)
+namespace: dev
+
+# Resources
+resources:
+  cpu: "2"
+  memory: "4Gi"
+
+# Sync configuration
+sync:
+  useGitignore: true
+  exclude:
+    - "*.pyc"
+    - "__pycache__"
+    - ".venv"
+    - ".pytest_cache"
+    - "*.egg-info"

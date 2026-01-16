@@ -1,0 +1,10 @@
+# High Resources Template
+# Usage: kubectl kodama start my-session --config examples/.kodama/templates/high-resources.yaml
+
+# For resource-intensive tasks (compilation, data processing, etc.)
+resources:
+  cpu: "8"
+  memory: "16Gi"
+
+# You can still override specific values with CLI flags
+# Example: kubectl kodama start heavy-task --config this-file.yaml --cpu 16

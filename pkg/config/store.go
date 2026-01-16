@@ -116,6 +116,33 @@ func (s *Store) SaveSession(config *SessionConfig) error {
 	return nil
 }
 
+// LoadSessionTemplate loads a session template configuration from an arbitrary path
+// This is used for --config flag to load session templates.
+// Unlike LoadSession, this does not validate the config as templates can be partial.
+func (s *Store) LoadSessionTemplate(path string) (*SessionConfig, error) {
+	// Validate path exists
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("session template file not found: %s", path)
+		}
+		return nil, fmt.Errorf("failed to access template file: %w", err)
+	}
+
+	// Read and parse YAML
+	data, err := os.ReadFile(path) // #nosec G304 -- user-provided path
+	if err != nil {
+		return nil, fmt.Errorf("failed to read session template: %w", err)
+	}
+
+	var config SessionConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse session template: %w", err)
+	}
+
+	// Note: Do NOT validate here - template can have partial config
+	return &config, nil
+}
+
 // DeleteSession removes a session configuration from disk
 func (s *Store) DeleteSession(name string) error {
 	path := s.GetSessionPath(name)
