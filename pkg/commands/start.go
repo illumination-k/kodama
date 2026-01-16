@@ -24,7 +24,6 @@ func NewStartCommand() *cobra.Command {
 		cpu          string
 		memory       string
 		branch       string
-		noSync       bool
 		prompt       string
 		promptFile   string
 		image        string
@@ -54,18 +53,17 @@ Examples:
 			}
 
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
-			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, noSync, kubeconfigPath, prompt, promptFile, image, gitSecret, cloneDepth, singleBranch, gitCloneArgs, configFile)
+			return runStart(args[0], repo, syncPath, namespace, cpu, memory, branch, kubeconfigPath, prompt, promptFile, image, gitSecret, cloneDepth, singleBranch, gitCloneArgs, configFile)
 		},
 	}
 
 	// Flags
-	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL to clone (automatically enables --no-sync)")
-	cmd.Flags().StringVar(&syncPath, "sync", "", "Local path to sync (default: current directory)")
+	cmd.Flags().StringVar(&repo, "repo", "", "Git repository URL to clone (mutually exclusive with --sync)")
+	cmd.Flags().StringVar(&syncPath, "sync", "", "Local path to sync (default: current directory, mutually exclusive with --repo)")
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace")
 	cmd.Flags().StringVar(&cpu, "cpu", "", "CPU limit (e.g., '1', '2')")
 	cmd.Flags().StringVar(&memory, "memory", "", "Memory limit (e.g., '2Gi', '4Gi')")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch to clone (default: repository default branch)")
-	cmd.Flags().BoolVar(&noSync, "no-sync", false, "Disable file synchronization (automatically enabled when using --repo)")
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
@@ -105,7 +103,7 @@ func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, names
 	fmt.Println("✓ Cleanup completed")
 }
 
-func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
+func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
 	ctx := context.Background()
 
 	// 1. Load global config for defaults
@@ -211,11 +209,6 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		}
 	}
 
-	// Auto-enable --no-sync when repo is specified (either via CLI or template)
-	if repo != "" {
-		noSync = true
-	}
-
 	// Layer 3: CLI flags (already set, highest priority - no override needed)
 
 	// Validate required fields after merge
@@ -223,29 +216,26 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		return fmt.Errorf("namespace is required. Specify via --namespace flag, template config, or set default in ~/.kodama/config.yaml")
 	}
 
-	// 4. Determine sync path
+	// 4. Validate mutual exclusivity between --repo and --sync
+	if syncPath != "" && repo != "" {
+		return fmt.Errorf("cannot use both --sync and --repo. Choose one mode per session")
+	}
+
+	// 5. Determine sync path (only when repo is not specified)
 	var syncEnabled bool
 	var resolvedSyncPath string
-	if !noSync {
+	if repo == "" {
 		if syncPath != "" {
 			resolvedSyncPath = syncPath
 			syncEnabled = true
 		} else {
-			// Default to current directory
+			// Default to current directory when neither --repo nor --sync specified
 			cwd, cwdErr := os.Getwd()
 			if cwdErr == nil {
 				resolvedSyncPath = cwd
 				syncEnabled = true
 			}
 		}
-	}
-
-	// 5. Validate mutual exclusivity between --repo and --sync
-	if syncEnabled && repo != "" {
-		return fmt.Errorf("cannot use both --sync and --repo. Choose one mode per session")
-	}
-	if !syncEnabled && repo == "" {
-		return fmt.Errorf("either --sync or --repo must be specified. Use --sync to sync local files, or --repo to clone a git repository")
 	}
 
 	// 6. Validate clone options
