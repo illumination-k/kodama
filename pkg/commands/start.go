@@ -69,7 +69,7 @@ Examples:
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
-	cmd.Flags().StringVar(&command, "cmd", "", "Pod command override (comma-separated, e.g., 'sh,-c,echo hello')")
+	cmd.Flags().StringVar(&command, "cmd", "", "Pod command override (space-separated, e.g., 'sh -c echo hello')")
 	cmd.Flags().StringVar(&gitSecret, "git-secret", "", "Kubernetes secret name for git credentials (overrides global default)")
 	cmd.Flags().IntVar(&cloneDepth, "clone-depth", 0, "Create a shallow clone with specified depth (0 = full clone)")
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
@@ -211,7 +211,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 			repo = templateConfig.Repo
 		}
 		if command == "" && len(templateConfig.Command) > 0 {
-			command = strings.Join(templateConfig.Command, ",")
+			command = strings.Join(templateConfig.Command, " ")
 		}
 	}
 
@@ -258,11 +258,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 	// Parse command string into slice
 	var cmdSlice []string
 	if command != "" {
-		cmdSlice = strings.Split(command, ",")
-		// Trim whitespace from each element
-		for i, arg := range cmdSlice {
-			cmdSlice[i] = strings.TrimSpace(arg)
-		}
+		cmdSlice = strings.Fields(command)
 	}
 
 	// 7. Create session config
