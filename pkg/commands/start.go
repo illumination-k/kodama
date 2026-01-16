@@ -80,7 +80,7 @@ Examples:
 }
 
 // cleanupFailedStart removes Kubernetes resources created during a failed start attempt
-func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, namespace, podName, configMapName string, configMapCreated, podCreated bool) {
+func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, namespace, podName string, podCreated bool) {
 	fmt.Println("\n⚠️  Start command failed. Cleaning up created resources...")
 
 	if podCreated {
@@ -90,16 +90,6 @@ func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, names
 			fmt.Printf("   Manual cleanup: kubectl delete pod %s -n %s\n", podName, namespace)
 		} else {
 			fmt.Println("✓ Pod deleted")
-		}
-	}
-
-	if configMapCreated {
-		fmt.Println("⏳ Deleting editor config...")
-		if err := k8sClient.DeleteEditorConfigMap(ctx, namespace, configMapName); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to delete ConfigMap: %v\n", err)
-			fmt.Printf("   Manual cleanup: kubectl delete configmap %s -n %s\n", configMapName, namespace)
-		} else {
-			fmt.Println("✓ Editor config deleted")
 		}
 	}
 
@@ -318,17 +308,15 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 
 	// Track which Kubernetes resources are created for cleanup on failure
 	var (
-		k8sClient        *kubernetes.Client
-		configMapCreated bool
-		podCreated       bool
-		configMapName    string
-		startSucceeded   bool // Set to true at the very end to skip cleanup
+		k8sClient      *kubernetes.Client
+		podCreated     bool
+		startSucceeded bool // Set to true at the very end to skip cleanup
 	)
 
 	// Setup cleanup on error - will only run if startSucceeded is false
 	defer func() {
 		if !startSucceeded && k8sClient != nil {
-			cleanupFailedStart(ctx, k8sClient, namespace, session.PodName, configMapName, configMapCreated, podCreated)
+			cleanupFailedStart(ctx, k8sClient, namespace, session.PodName, podCreated)
 		}
 	}()
 
@@ -349,23 +337,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 	// Progress indicator
 	fmt.Printf("Creating session '%s'...\n", name)
 
-	// 9. Create editor configuration ConfigMap
-	fmt.Println("⏳ Creating editor configuration...")
-	configMapName = fmt.Sprintf("kodama-editor-config-%s", name)
-	configPath := ""
-	if syncEnabled && resolvedSyncPath != "" {
-		configPath = resolvedSyncPath
-	}
-
-	if err := k8sClient.CreateEditorConfigMap(ctx, namespace, configMapName, configPath); err != nil {
-		session.UpdateStatus(config.StatusFailed)
-		_ = store.SaveSession(session)
-		return fmt.Errorf("failed to create editor configuration: %w", err)
-	}
-	configMapCreated = true
-	fmt.Println("✓ Editor configuration created")
-
-	// 10. Create pod
+	// 9. Create pod
 	fmt.Println("⏳ Creating pod...")
 
 	// Determine which image to use: session config > global default
@@ -401,14 +373,13 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch, kubeconfigPa
 	}
 
 	podSpec := &kubernetes.PodSpec{
-		Name:                session.PodName,
-		Namespace:           namespace,
-		Image:               effectiveImage,
-		CPULimit:            cpu,
-		MemoryLimit:         memory,
-		GitSecretName:       effectiveGitSecret,
-		EditorConfigMapName: configMapName,
-		Command:             effectiveCommand,
+		Name:          session.PodName,
+		Namespace:     namespace,
+		Image:         effectiveImage,
+		CPULimit:      cpu,
+		MemoryLimit:   memory,
+		GitSecretName: effectiveGitSecret,
+		Command:       effectiveCommand,
 
 		// Git configuration for workspace-initializer init container
 		GitRepo:         repo,

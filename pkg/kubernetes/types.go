@@ -36,9 +36,6 @@ type PodSpec struct {
 	ClaudeAuthFile   string            // Path to auth file (for file auth)
 	ClaudeEnvVars    map[string]string // Additional env vars for auth
 
-	// Editor configuration
-	EditorConfigMapName string // ConfigMap name for editor configs (Helix, Zellij)
-
 	// Git repository configuration for workspace-initializer init container
 	GitRepo         string // Git repository URL (empty if no repo)
 	GitBranch       string // Feature branch name to create
