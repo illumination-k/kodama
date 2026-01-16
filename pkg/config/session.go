@@ -44,6 +44,7 @@ type SessionConfig struct {
 	UpdatedAt       time.Time           `yaml:"updatedAt"`
 	Sync            SyncConfig          `yaml:"sync,omitempty"`
 	Resources       ResourceConfig      `yaml:"resources,omitempty"`
+	Ttyd            TtydConfig          `yaml:"ttyd,omitempty"`
 	Name            string              `yaml:"name"`
 	Namespace       string              `yaml:"namespace"`
 	Repo            string              `yaml:"repo"`
@@ -92,6 +93,14 @@ type SyncConfig struct {
 type ResourceConfig struct {
 	CPU    string `yaml:"cpu,omitempty"`
 	Memory string `yaml:"memory,omitempty"`
+}
+
+// TtydConfig holds ttyd (Web-based terminal) configuration
+type TtydConfig struct {
+	Enabled  *bool  `yaml:"enabled,omitempty"`  // nil = use default (true), explicitly set to override
+	Port     int    `yaml:"port,omitempty"`     // Default: 7681
+	Options  string `yaml:"options,omitempty"`  // Additional ttyd options
+	Writable *bool  `yaml:"writable,omitempty"` // nil = use default (true), false = read-only mode
 }
 
 // Validate checks if the session configuration is valid

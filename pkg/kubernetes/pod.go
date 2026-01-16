@@ -39,6 +39,31 @@ echo "Claude Code installation complete"`,
 	}
 }
 
+// createTtydInstallerInitContainer creates init container for ttyd installation
+func createTtydInstallerInitContainer() corev1.Container {
+	return corev1.Container{
+		Name:    "ttyd-installer",
+		Image:   "ubuntu:24.04",
+		Command: []string{"/bin/bash", "-c"},
+		Args: []string{
+			`set -e
+echo "Installing ttyd..."
+apt-get update -qq && apt-get install -y -qq curl ca-certificates
+curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /tmp/ttyd
+chmod +x /tmp/ttyd
+mkdir -p /kodama/bin
+cp /tmp/ttyd /kodama/bin/ttyd
+echo "ttyd installation complete"`,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "kodama-bin",
+				MountPath: "/kodama/bin",
+			},
+		},
+	}
+}
+
 // createWorkspaceInitializerInitContainer creates init container for git operations
 func createWorkspaceInitializerInitContainer(spec *PodSpec) *corev1.Container {
 	// Skip if no repository specified
@@ -95,9 +120,34 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		createClaudeInstallerInitContainer(),
 	}
 
+	// Add ttyd installer if enabled
+	if spec.TtydEnabled {
+		initContainers = append(initContainers, createTtydInstallerInitContainer())
+	}
+
 	// Add workspace initializer if git repo specified
 	if workspaceInit := createWorkspaceInitializerInitContainer(spec); workspaceInit != nil {
 		initContainers = append(initContainers, *workspaceInit)
+	}
+
+	// Determine container command based on ttyd settings
+	containerCommand := spec.Command
+	if spec.TtydEnabled {
+		ttydPort := spec.TtydPort
+		if ttydPort == 0 {
+			ttydPort = 7681
+		}
+		// Build ttyd command with options
+		ttydCmd := fmt.Sprintf("cd /workspace && /kodama/bin/ttyd -p %d", ttydPort)
+		// Add writable flag if enabled (default: true)
+		if spec.TtydWritable {
+			ttydCmd += " -W"
+		}
+		if spec.TtydOptions != "" {
+			ttydCmd += " " + spec.TtydOptions
+		}
+		ttydCmd += " bash"
+		containerCommand = []string{"/bin/bash", "-c", ttydCmd}
 	}
 
 	pod := &corev1.Pod{
@@ -115,13 +165,32 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 				{
 					Name:       "claude-code",
 					Image:      spec.Image,
-					Command:    spec.Command,
+					Command:    containerCommand,
 					WorkingDir: "/workspace",
 					Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit),
 				},
 			},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
+	}
+
+	// Add ttyd port if enabled
+	if spec.TtydEnabled {
+		ttydPort := spec.TtydPort
+		if ttydPort == 0 {
+			ttydPort = 7681
+		}
+		// Validate port range before conversion
+		if ttydPort < 1 || ttydPort > 65535 {
+			return fmt.Errorf("invalid ttyd port: %d (must be between 1 and 65535)", ttydPort)
+		}
+		pod.Spec.Containers[0].Ports = []corev1.ContainerPort{
+			{
+				Name:          "ttyd",
+				ContainerPort: int32(ttydPort), //#nosec G115 -- port validated to be in valid range
+				Protocol:      corev1.ProtocolTCP,
+			},
+		}
 	}
 
 	// Add PATH environment variable to include kodama-bin (contains Claude Code and other tools)
