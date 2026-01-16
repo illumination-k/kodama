@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -322,7 +323,8 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 		session.DiffViewer.Enabled = true
 	}
-	if opts.DiffViewerPort > 0 && session.DiffViewer != nil {
+	if opts.DiffViewerPort > 0 && opts.DiffViewerPort <= math.MaxInt32 && session.DiffViewer != nil {
+		// #nosec G115 -- Port numbers are limited to 0-65535, well within int32 range
 		session.DiffViewer.Port = int32(opts.DiffViewerPort)
 	}
 
