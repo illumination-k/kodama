@@ -124,8 +124,21 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		return fmt.Errorf("failed to load global config: %w", err)
 	}
 
-	// 1.5 Load session template config if specified
+	// 1.5 Load session template config if specified or found in current directory
 	var templateConfig *config.SessionConfig
+
+	// Auto-detect .kodama.yaml in current directory if --config not specified
+	if configFile == "" {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr == nil {
+			candidatePath := fmt.Sprintf("%s/.kodama.yaml", cwd)
+			if _, statErr := os.Stat(candidatePath); statErr == nil {
+				configFile = candidatePath
+				fmt.Printf("📄 Found .kodama.yaml in current directory\n")
+			}
+		}
+	}
+
 	if configFile != "" {
 		fmt.Printf("Loading session template from: %s\n", configFile)
 		var loadedTemplate *config.SessionConfig
@@ -281,6 +294,9 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		}
 		if templateConfig.Sync.UseGitignore != nil {
 			session.Sync.UseGitignore = templateConfig.Sync.UseGitignore
+		}
+		if len(templateConfig.Sync.CustomDirs) > 0 {
+			session.Sync.CustomDirs = templateConfig.Sync.CustomDirs
 		}
 		if templateConfig.ClaudeAuth != nil {
 			session.ClaudeAuth = templateConfig.ClaudeAuth
