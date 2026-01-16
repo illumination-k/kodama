@@ -14,6 +14,7 @@ type DefaultsConfig struct {
 	Image        string         `yaml:"image"`
 	Resources    ResourceConfig `yaml:"resources"`
 	Storage      StorageConfig  `yaml:"storage"`
+	Ttyd         TtydConfig     `yaml:"ttyd"`
 	BranchPrefix string         `yaml:"branchPrefix"`
 }
 
@@ -69,6 +70,7 @@ type GlobalSyncConfig struct {
 // DefaultGlobalConfig returns a GlobalConfig with sensible defaults
 func DefaultGlobalConfig() *GlobalConfig {
 	useGitignore := true
+	ttydEnabled := true
 	return &GlobalConfig{
 		Defaults: DefaultsConfig{
 			Namespace: "default",
@@ -80,6 +82,10 @@ func DefaultGlobalConfig() *GlobalConfig {
 			Storage: StorageConfig{
 				Workspace:  "10Gi",
 				ClaudeHome: "1Gi",
+			},
+			Ttyd: TtydConfig{
+				Enabled: &ttydEnabled,
+				Port:    7681,
 			},
 			BranchPrefix: "kodama/",
 		},
@@ -112,6 +118,17 @@ func (g *GlobalConfig) Merge(other *GlobalConfig) {
 	}
 	if other.Defaults.BranchPrefix != "" {
 		g.Defaults.BranchPrefix = other.Defaults.BranchPrefix
+	}
+	// Merge ttyd config
+	if other.Defaults.Ttyd.Port != 0 {
+		g.Defaults.Ttyd.Port = other.Defaults.Ttyd.Port
+	}
+	if other.Defaults.Ttyd.Options != "" {
+		g.Defaults.Ttyd.Options = other.Defaults.Ttyd.Options
+	}
+	// Enabled is a *bool, only merge if explicitly set (non-nil)
+	if other.Defaults.Ttyd.Enabled != nil {
+		g.Defaults.Ttyd.Enabled = other.Defaults.Ttyd.Enabled
 	}
 	if other.Git.SecretName != "" {
 		g.Git.SecretName = other.Git.SecretName

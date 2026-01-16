@@ -26,6 +26,9 @@ func NewStartCommand() *cobra.Command {
 		singleBranch bool
 		gitCloneArgs string
 		configFile   string
+		ttydEnabled  bool
+		ttydPort     int
+		ttydOptions  string
 	)
 
 	cmd := &cobra.Command{
@@ -66,6 +69,10 @@ Examples:
 				SingleBranch:   singleBranch,
 				GitCloneArgs:   gitCloneArgs,
 				ConfigFile:     configFile,
+				TtydEnabled:    cmd.Flags().Changed("ttyd"),
+				TtydEnabledVal: ttydEnabled,
+				TtydPort:       ttydPort,
+				TtydOptions:    ttydOptions,
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -75,10 +82,21 @@ Examples:
 
 			// Print success message
 			fmt.Printf("\n✨ Session '%s' is ready!\n", session.Name)
+
+			if session.Ttyd.Enabled {
+				fmt.Printf("\n🌐 Web-based terminal (ttyd) is enabled\n")
+				fmt.Printf("   The session will be accessible via browser\n")
+			}
+
 			fmt.Printf("\nNext steps:\n")
-			fmt.Printf("  kubectl kodama attach %s    # Attach to session\n", session.Name)
-			fmt.Printf("  kubectl kodama list         # List all sessions\n")
-			fmt.Printf("  kubectl kodama delete %s    # Delete session\n", session.Name)
+			if session.Ttyd.Enabled {
+				fmt.Printf("  kubectl kodama attach %s           # Open in browser (ttyd)\n", session.Name)
+				fmt.Printf("  kubectl kodama attach %s --tty     # Use traditional TTY mode\n", session.Name)
+			} else {
+				fmt.Printf("  kubectl kodama attach %s           # Attach to session\n", session.Name)
+			}
+			fmt.Printf("  kubectl kodama list                # List all sessions\n")
+			fmt.Printf("  kubectl kodama delete %s           # Delete session\n", session.Name)
 
 			if session.Sync.Enabled {
 				fmt.Printf("\n📁 Files are syncing between %s and pod\n", session.Sync.LocalPath)
@@ -105,6 +123,9 @@ Examples:
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
 	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")
 	cmd.Flags().StringVar(&configFile, "config", "", "Path to session template config file")
+	cmd.Flags().BoolVar(&ttydEnabled, "ttyd", true, "Enable ttyd (web-based terminal)")
+	cmd.Flags().IntVar(&ttydPort, "ttyd-port", 0, "Ttyd port (default: 7681)")
+	cmd.Flags().StringVar(&ttydOptions, "ttyd-options", "", "Additional ttyd options")
 
 	return cmd
 }

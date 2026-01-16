@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -36,6 +37,10 @@ type StartSessionOptions struct {
 	SingleBranch   bool
 	GitCloneArgs   string
 	ConfigFile     string
+	TtydEnabled    bool
+	TtydEnabledVal bool
+	TtydPort       int
+	TtydOptions    string
 }
 
 // AttachSessionOptions contains all options for attaching to a session
@@ -43,6 +48,9 @@ type AttachSessionOptions struct {
 	Name           string
 	Command        string
 	KubeconfigPath string
+	TtyMode        bool
+	LocalPort      int
+	NoBrowser      bool
 }
 
 // StartSession starts a new Claude Code session and returns the session config
@@ -110,6 +118,13 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	gitCloneArgs := opts.GitCloneArgs
 	repo := opts.Repo
 	command := opts.Command
+	// Default ttyd to true if not explicitly set in global config
+	ttydEnabled := true
+	if globalConfig.Defaults.Ttyd.Enabled != nil {
+		ttydEnabled = *globalConfig.Defaults.Ttyd.Enabled
+	}
+	ttydPort := globalConfig.Defaults.Ttyd.Port
+	ttydOptions := globalConfig.Defaults.Ttyd.Options
 
 	// Layer 1: Apply global config defaults (if CLI flag is empty)
 	if namespace == "" {
@@ -163,9 +178,29 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		if command == "" && len(templateConfig.Command) > 0 {
 			command = strings.Join(templateConfig.Command, " ")
 		}
+		// Apply template ttyd config
+		if templateConfig.Ttyd.Enabled != nil {
+			ttydEnabled = *templateConfig.Ttyd.Enabled
+		}
+		if templateConfig.Ttyd.Port != 0 {
+			ttydPort = templateConfig.Ttyd.Port
+		}
+		if templateConfig.Ttyd.Options != "" {
+			ttydOptions = templateConfig.Ttyd.Options
+		}
 	}
 
 	// Layer 3: CLI flags (already set, highest priority - no override needed)
+	// Apply CLI flag ttyd overrides
+	if opts.TtydEnabled {
+		ttydEnabled = opts.TtydEnabledVal
+	}
+	if opts.TtydPort != 0 {
+		ttydPort = opts.TtydPort
+	}
+	if opts.TtydOptions != "" {
+		ttydOptions = opts.TtydOptions
+	}
 
 	// Validate required fields after merge
 	if namespace == "" {
@@ -233,6 +268,11 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		Resources: config.ResourceConfig{
 			CPU:    cpu,
 			Memory: memory,
+		},
+		Ttyd: config.TtydConfig{
+			Enabled: &ttydEnabled,
+			Port:    ttydPort,
+			Options: ttydOptions,
 		},
 		Sync: config.SyncConfig{
 			Enabled:   syncEnabled,
@@ -347,6 +387,11 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		GitCloneDepth:   cloneDepth,
 		GitSingleBranch: singleBranch,
 		GitCloneArgs:    gitCloneArgs,
+
+		// Ttyd configuration
+		TtydEnabled: ttydEnabled,
+		TtydPort:    ttydPort,
+		TtydOptions: ttydOptions,
 	}
 
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {
@@ -475,6 +520,14 @@ func AttachSession(ctx context.Context, opts AttachSessionOptions) error {
 		return fmt.Errorf("failed to load session: %w", err)
 	}
 
+	// 2. Determine attachment mode
+	// Use ttyd mode if: ttyd is enabled in session AND --tty flag is not set
+	ttydEnabled := session.Ttyd.Enabled != nil && *session.Ttyd.Enabled
+	if ttydEnabled && !opts.TtyMode {
+		return attachViaTtyd(ctx, session, opts)
+	}
+
+	// Fall back to traditional TTY mode
 	return AttachToSession(ctx, session, opts.Command, opts.KubeconfigPath)
 }
 
@@ -587,4 +640,87 @@ func buildExcludeConfig(localPath string, globalCfg *config.GlobalConfig, sessio
 		Patterns:     patterns,
 		UseGitignore: useGitignore,
 	}
+}
+
+// attachViaTtyd attaches to a session using ttyd (web-based terminal)
+func attachViaTtyd(ctx context.Context, session *config.SessionConfig, opts AttachSessionOptions) error {
+	// 1. Create Kubernetes client
+	k8sClient, err := kubernetes.NewClient(opts.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	// 2. Verify pod is running
+	podStatus, err := k8sClient.GetPod(ctx, session.PodName, session.Namespace)
+	if err != nil {
+		return fmt.Errorf("pod not found: %w\n\nStart the session with:\n  kubectl kodama start %s", err, session.Name)
+	}
+
+	if !podStatus.Ready {
+		return fmt.Errorf("pod is not ready (status: %s)\n\nCheck pod status:\n  kubectl get pod %s -n %s\n  kubectl describe pod %s -n %s",
+			podStatus.Phase, session.PodName, session.Namespace, session.PodName, session.Namespace)
+	}
+
+	// 3. Determine ports
+	remotePort := session.Ttyd.Port
+	if remotePort == 0 {
+		remotePort = 7681 // default ttyd port
+	}
+
+	localPort := opts.LocalPort
+	if localPort == 0 {
+		localPort = remotePort // use same port locally by default
+	}
+
+	// 4. Start port-forward
+	fmt.Printf("Starting port-forward: localhost:%d -> %s:%d...\n", localPort, session.PodName, remotePort)
+
+	portForwardCmd, err := k8sClient.StartPortForward(ctx, session.PodName, localPort, remotePort)
+	if err != nil {
+		return fmt.Errorf("failed to start port-forward: %w", err)
+	}
+
+	// Ensure port-forward is cleaned up on exit
+	defer func() {
+		if portForwardCmd.Process != nil {
+			_ = portForwardCmd.Process.Kill()
+		}
+	}()
+
+	fmt.Println("✓ Port-forward established")
+
+	// 5. Open browser if requested
+	url := fmt.Sprintf("http://localhost:%d", localPort)
+	if !opts.NoBrowser {
+		fmt.Printf("Opening browser: %s\n", url)
+		if err := openBrowser(url); err != nil {
+			fmt.Printf("⚠️  Failed to open browser: %v\n", err)
+			fmt.Printf("   Please open manually: %s\n", url)
+		}
+	} else {
+		fmt.Printf("Access the terminal at: %s\n", url)
+	}
+
+	// 6. Wait for port-forward process to exit (Ctrl+C or process termination)
+	fmt.Println("\nPress Ctrl+C to stop port-forward and exit")
+	return portForwardCmd.Wait()
+}
+
+// openBrowser opens a URL in the default browser
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	ctx := context.Background()
+
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.CommandContext(ctx, "xdg-open", url)
+	case "darwin":
+		cmd = exec.CommandContext(ctx, "open", url)
+	case "windows":
+		cmd = exec.CommandContext(ctx, "rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
+	return cmd.Start()
 }

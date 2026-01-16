@@ -42,6 +42,11 @@ type PodSpec struct {
 	GitCloneDepth   int    // Clone depth (0 for full clone)
 	GitSingleBranch bool   // Whether to clone single branch only
 	GitCloneArgs    string // Additional git clone arguments
+
+	// Ttyd (Web-based terminal) configuration
+	TtydEnabled bool
+	TtydPort    int
+	TtydOptions string
 }
 
 // PVCSpec contains specifications for creating a PersistentVolumeClaim
