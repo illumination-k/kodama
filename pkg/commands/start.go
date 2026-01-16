@@ -440,6 +440,15 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 			fmt.Println("✓ Initial sync completed")
 			fmt.Println("   Tip: Use 'kubectl kodama attach --sync' for live sync during development")
 		}
+
+		// Sync custom directories (dotfiles, configs, etc.)
+		customDirs := determineCustomDirs(globalConfig, session)
+		if len(customDirs) > 0 {
+			customSyncMgr := sync.NewCustomDirSyncManager(syncMgr)
+			if err := customSyncMgr.SyncCustomDirs(ctx, customDirs, namespace, session.PodName, globalConfig); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to sync custom directories: %v\n", err)
+			}
+		}
 	}
 
 	// 12. Update status to Running and save
@@ -504,6 +513,16 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	// Mark start as successful to skip cleanup
 	startSucceeded = true
 	return nil
+}
+
+// determineCustomDirs returns the custom directories to sync
+// Session-level custom dirs completely override global custom dirs
+func determineCustomDirs(globalCfg *config.GlobalConfig, sessionCfg *config.SessionConfig) []config.CustomDirSync {
+	// Session custom dirs override global custom dirs
+	if len(sessionCfg.Sync.CustomDirs) > 0 {
+		return sessionCfg.Sync.CustomDirs
+	}
+	return globalCfg.Sync.CustomDirs
 }
 
 // buildExcludeConfig creates exclude.Config from global and session configs

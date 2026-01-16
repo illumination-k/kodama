@@ -13,6 +13,9 @@ shellcheck = "0.10.0" # need for actionlint
 "aqua:suzuki-shunsuke/pinact" = "3.3.0"
 prek = "latest"
 
+# need to pipx backend
+uv = "latest"
+
 [tasks.fmt]
 description = "Format (dprint + golangci-lint: gofumpt/goimports)"
 run = ["dprint fmt", "golangci-lint fmt -c .golangci.yml"]

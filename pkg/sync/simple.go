@@ -44,7 +44,36 @@ func (s *simpleSyncManager) InitialSync(ctx context.Context, localPath, namespac
 		return fmt.Errorf("local path does not exist: %w", err)
 	}
 
-	return s.initialSync(ctx, absPath, namespace, podName, excludeCfg)
+	return s.initialSync(ctx, absPath, "/workspace", namespace, podName, excludeCfg)
+}
+
+// InitialSyncToCustomPath performs one-time sync from local to custom path in pod
+func (s *simpleSyncManager) InitialSyncToCustomPath(ctx context.Context, localPath, remotePath, namespace, podName string, excludeCfg *exclude.Config) error {
+	// Resolve absolute path
+	absPath, err := filepath.Abs(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	// Verify path exists
+	if _, err := os.Stat(absPath); err != nil {
+		return fmt.Errorf("local path does not exist: %w", err)
+	}
+
+	// Ensure parent directory exists in pod
+	remoteDir := filepath.Dir(remotePath)
+	//#nosec G204 -- kubectl exec with namespace/pod from session config
+	mkdirCmd := exec.CommandContext(ctx, "kubectl", "exec",
+		"-n", namespace,
+		podName,
+		"--",
+		"mkdir", "-p", remoteDir,
+	)
+	if err := mkdirCmd.Run(); err != nil {
+		return fmt.Errorf("failed to create parent directory %s in pod: %w", remoteDir, err)
+	}
+
+	return s.initialSync(ctx, absPath, remotePath, namespace, podName, excludeCfg)
 }
 
 // Start creates a new sync session using kubectl cp and fsnotify
@@ -78,7 +107,7 @@ func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, n
 
 	// Initial sync: copy all files to pod
 	fmt.Println("🔄 Performing initial sync...")
-	if syncErr := s.initialSync(ctx, absPath, namespace, podName, excludeCfg); syncErr != nil {
+	if syncErr := s.initialSync(ctx, absPath, "/workspace", namespace, podName, excludeCfg); syncErr != nil {
 		return fmt.Errorf("initial sync failed: %w", syncErr)
 	}
 	fmt.Println("✓ Initial sync completed")
@@ -109,9 +138,8 @@ func (s *simpleSyncManager) Start(ctx context.Context, sessionName, localPath, n
 }
 
 // initialSync performs initial sync of all files
-func (s *simpleSyncManager) initialSync(ctx context.Context, localPath, namespace, podName string, excludeCfg *exclude.Config) error {
+func (s *simpleSyncManager) initialSync(ctx context.Context, localPath, remotePath, namespace, podName string, excludeCfg *exclude.Config) error {
 	// Use tar + kubectl exec for efficient initial sync
-	remotePath := "/workspace"
 
 	// Build tar command arguments
 	tarArgs := []string{"czf", "-"}

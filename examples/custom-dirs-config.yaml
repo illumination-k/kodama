@@ -1,0 +1,57 @@
+# Example Kodama Configuration with Custom Directory Syncing
+# Place this at ~/.kodama/config.yaml for global settings
+# or use with `kubectl kodama start --config <path>` for session-specific settings
+
+sync:
+  # Use .gitignore patterns for all synced directories (default: true)
+  useGitignore: true
+
+  # Global exclude patterns (applied to all synced directories)
+  exclude:
+    - "*.log"
+    - "*.tmp"
+    - ".DS_Store"
+
+  # Custom directories to sync to pods during startup
+  # These complement the workspace sync
+  customDirs:
+    # Sync shell configuration
+    - source: "~/.bashrc"
+      destination: "/root/.bashrc"
+      # Optional: override global exclude patterns for this directory
+      # exclude: []
+      # Optional: override global gitignore setting
+      # useGitignore: false
+
+    # Sync vim configuration
+    - source: "~/.vimrc"
+      destination: "/root/.vimrc"
+
+    # Sync git configuration directory
+    - source: "~/.config/git"
+      destination: "/root/.config/git"
+      # Don't use gitignore for config directory
+      useGitignore: false
+
+    # Sync SSH configuration (for git operations)
+    - source: "~/.ssh/config"
+      destination: "/root/.ssh/config"
+      useGitignore: false
+
+    # Sync a custom scripts directory
+    - source: "~/dotfiles/scripts"
+      destination: "/root/scripts"
+      exclude:
+        - "*.backup"
+        - "test-*"
+
+# Session-specific configuration can also include customDirs
+# which will completely override the global customDirs
+# Example session template:
+#
+# sync:
+#   enabled: true
+#   localPath: /path/to/workspace
+#   customDirs:
+#     - source: "~/project-specific/.vimrc"
+#       destination: "/root/.vimrc"
