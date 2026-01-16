@@ -172,7 +172,9 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		},
 	}
 
+	// Workspace volume - always included (PVC or emptyDir)
 	if spec.WorkspacePVC != "" {
+		// Use PVC if specified
 		volumes = append(volumes, corev1.Volume{
 			Name: "workspace",
 			VolumeSource: corev1.VolumeSource{
@@ -181,11 +183,19 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 				},
 			},
 		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "workspace",
-			MountPath: "/workspace",
+	} else {
+		// Use emptyDir by default (needed for git clone in init container)
+		volumes = append(volumes, corev1.Volume{
+			Name: "workspace",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
 		})
 	}
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      "workspace",
+		MountPath: "/workspace",
+	})
 
 	if spec.ClaudeHomePVC != "" {
 		volumes = append(volumes, corev1.Volume{

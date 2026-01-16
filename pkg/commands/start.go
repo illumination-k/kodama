@@ -78,6 +78,33 @@ Examples:
 	return cmd
 }
 
+// cleanupFailedStart removes Kubernetes resources created during a failed start attempt
+func cleanupFailedStart(ctx context.Context, k8sClient *kubernetes.Client, namespace, podName, configMapName string, configMapCreated, podCreated bool) {
+	fmt.Println("\n⚠️  Start command failed. Cleaning up created resources...")
+
+	if podCreated {
+		fmt.Println("⏳ Deleting pod...")
+		if err := k8sClient.DeletePod(ctx, podName, namespace); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to delete pod: %v\n", err)
+			fmt.Printf("   Manual cleanup: kubectl delete pod %s -n %s\n", podName, namespace)
+		} else {
+			fmt.Println("✓ Pod deleted")
+		}
+	}
+
+	if configMapCreated {
+		fmt.Println("⏳ Deleting editor config...")
+		if err := k8sClient.DeleteEditorConfigMap(ctx, namespace, configMapName); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to delete ConfigMap: %v\n", err)
+			fmt.Printf("   Manual cleanup: kubectl delete configmap %s -n %s\n", configMapName, namespace)
+		} else {
+			fmt.Println("✓ Editor config deleted")
+		}
+	}
+
+	fmt.Println("✓ Cleanup completed")
+}
+
 func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSync bool, kubeconfigPath, prompt, promptFile, image, gitSecret string, cloneDepth int, singleBranch bool, gitCloneArgs, configFile string) error {
 	ctx := context.Background()
 
@@ -265,8 +292,24 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		return fmt.Errorf("failed to save session config: %w", saveErr)
 	}
 
+	// Track which Kubernetes resources are created for cleanup on failure
+	var (
+		k8sClient        *kubernetes.Client
+		configMapCreated bool
+		podCreated       bool
+		configMapName    string
+		startSucceeded   bool // Set to true at the very end to skip cleanup
+	)
+
+	// Setup cleanup on error - will only run if startSucceeded is false
+	defer func() {
+		if !startSucceeded && k8sClient != nil {
+			cleanupFailedStart(ctx, k8sClient, namespace, session.PodName, configMapName, configMapCreated, podCreated)
+		}
+	}()
+
 	// 7. Create K8s client
-	k8sClient, err := kubernetes.NewClient(kubeconfigPath)
+	k8sClient, err = kubernetes.NewClient(kubeconfigPath)
 	if err != nil {
 		session.UpdateStatus(config.StatusFailed)
 		_ = store.SaveSession(session) // Best effort update
@@ -284,7 +327,7 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 
 	// 9. Create editor configuration ConfigMap
 	fmt.Println("⏳ Creating editor configuration...")
-	configMapName := fmt.Sprintf("kodama-editor-config-%s", name)
+	configMapName = fmt.Sprintf("kodama-editor-config-%s", name)
 	configPath := ""
 	if syncEnabled && resolvedSyncPath != "" {
 		configPath = resolvedSyncPath
@@ -293,8 +336,9 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	if err := k8sClient.CreateEditorConfigMap(ctx, namespace, configMapName, configPath); err != nil {
 		session.UpdateStatus(config.StatusFailed)
 		_ = store.SaveSession(session)
-		return fmt.Errorf("failed to create editor configuration: %w\n\nCleanup: kubectl kodama delete %s", err, name)
+		return fmt.Errorf("failed to create editor configuration: %w", err)
 	}
+	configMapCreated = true
 	fmt.Println("✓ Editor configuration created")
 
 	// 10. Create pod
@@ -347,8 +391,9 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {
 		session.UpdateStatus(config.StatusFailed)
 		_ = store.SaveSession(session) // Best effort update
-		return fmt.Errorf("failed to create pod: %w\n\nCleanup: kubectl kodama delete %s", err, name)
+		return fmt.Errorf("failed to create pod: %w", err)
 	}
+	podCreated = true
 	fmt.Println("✓ Pod created")
 
 	// 10. Wait for pod ready (including init containers)
@@ -360,8 +405,8 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 	if err := k8sClient.WaitForPodReady(ctx, session.PodName, namespace, 5*time.Minute); err != nil {
 		session.UpdateStatus(config.StatusFailed)
 		_ = store.SaveSession(session) // Best effort update
-		return fmt.Errorf("pod failed to start: %w\n\nTroubleshooting:\n  kubectl logs %s -c claude-installer -n %s\n  kubectl logs %s -c workspace-initializer -n %s\n  kubectl describe pod %s -n %s\n\nCleanup: kubectl kodama delete %s",
-			err, session.PodName, namespace, session.PodName, namespace, session.PodName, namespace, name)
+		return fmt.Errorf("pod failed to start: %w\n\nTroubleshooting:\n  kubectl logs %s -c claude-installer -n %s\n  kubectl logs %s -c workspace-initializer -n %s\n  kubectl describe pod %s -n %s",
+			err, session.PodName, namespace, session.PodName, namespace, session.PodName, namespace)
 	}
 	fmt.Println("✓ Init containers completed")
 
@@ -451,6 +496,8 @@ func runStart(name, repo, syncPath, namespace, cpu, memory, branch string, noSyn
 		fmt.Printf("\n📁 Files are syncing between %s and pod\n", resolvedSyncPath)
 	}
 
+	// Mark start as successful to skip cleanup
+	startSucceeded = true
 	return nil
 }
 
