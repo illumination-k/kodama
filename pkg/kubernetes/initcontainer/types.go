@@ -105,8 +105,8 @@ func (b *Builder) BuildCombined(name string, configs ...InstallerConfig) corev1.
 
 // extractCommands extracts actual commands from a script, skipping "set -e" and echo statements
 func extractCommands(script string) []string {
-	var commands []string
 	lines := splitLines(script)
+	commands := make([]string, 0, len(lines))
 
 	for _, line := range lines {
 		trimmed := trimSpace(line)

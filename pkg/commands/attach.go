@@ -3,8 +3,9 @@ package commands
 import (
 	"context"
 
-	"github.com/illumination-k/kodama/pkg/usecase"
 	"github.com/spf13/cobra"
+
+	"github.com/illumination-k/kodama/pkg/usecase"
 )
 
 // NewAttachCommand creates a new attach command

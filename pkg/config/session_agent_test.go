@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/illumination-k/kodama/pkg/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/illumination-k/kodama/pkg/agent"
 )
 
 func TestSessionConfig_StartAgent_Success(t *testing.T) {

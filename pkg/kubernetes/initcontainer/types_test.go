@@ -130,7 +130,7 @@ func TestBuildScriptOrder(t *testing.T) {
 		t.Fatal("Script missing expected components")
 	}
 
-	if !(startIdx < cmd1Idx && cmd1Idx < cmd2Idx && cmd2Idx < cmd3Idx && cmd3Idx < endIdx) {
+	if startIdx >= cmd1Idx || cmd1Idx >= cmd2Idx || cmd2Idx >= cmd3Idx || cmd3Idx >= endIdx {
 		t.Errorf("Script components not in expected order:\nScript:\n%s", script)
 	}
 }

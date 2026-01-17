@@ -1,9 +1,10 @@
 package initcontainer
 
 import (
-	"github.com/illumination-k/kodama/pkg/gitcmd"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
+
+	"github.com/illumination-k/kodama/pkg/gitcmd"
 )
 
 // WorkspaceInitializerConfig configures workspace initialization (git clone)

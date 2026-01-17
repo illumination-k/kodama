@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/illumination-k/kodama/pkg/gitcmd"
-	"github.com/illumination-k/kodama/pkg/kubernetes/initcontainer"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+
+	"github.com/illumination-k/kodama/pkg/gitcmd"
+	"github.com/illumination-k/kodama/pkg/kubernetes/initcontainer"
 )
 
 // buildInitContainers creates all required init containers based on PodSpec

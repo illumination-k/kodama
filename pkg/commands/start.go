@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/illumination-k/kodama/pkg/usecase"
 	"github.com/spf13/cobra"
+
+	"github.com/illumination-k/kodama/pkg/usecase"
 )
 
 // NewStartCommand creates a new start command

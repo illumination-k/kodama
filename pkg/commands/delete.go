@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/illumination-k/kodama/pkg/sync"
-	"github.com/spf13/cobra"
 )
 
 // NewDeleteCommand creates a new delete command

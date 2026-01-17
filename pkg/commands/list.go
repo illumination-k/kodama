@@ -7,11 +7,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/illumination-k/kodama/pkg/sync"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // NewListCommand creates a new list command
