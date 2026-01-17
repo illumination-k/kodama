@@ -3,8 +3,9 @@ package commands
 import (
 	"fmt"
 
-	"github.com/illumination-k/kodama/internal/version"
 	"github.com/spf13/cobra"
+
+	"github.com/illumination-k/kodama/internal/version"
 )
 
 // NewRootCommand creates the root command for kubectl-kodama
