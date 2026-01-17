@@ -5,6 +5,10 @@
 resources:
   cpu: "8"
   memory: "16Gi"
+  # Optional: Add custom resources like GPUs
+  # customResources:
+  #   nvidia.com/gpu: "1"
 
 # You can still override specific values with CLI flags
 # Example: kubectl kodama start heavy-task --config this-file.yaml --cpu 16
+# Example with GPU: kubectl kodama start heavy-task --config this-file.yaml --resource nvidia.com/gpu=2

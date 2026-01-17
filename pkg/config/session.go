@@ -91,8 +91,9 @@ type SyncConfig struct {
 
 // ResourceConfig holds resource limit configuration
 type ResourceConfig struct {
-	CPU    string `yaml:"cpu,omitempty"`
-	Memory string `yaml:"memory,omitempty"`
+	CPU             string            `yaml:"cpu,omitempty"`
+	Memory          string            `yaml:"memory,omitempty"`
+	CustomResources map[string]string `yaml:"customResources,omitempty"` // e.g., "nvidia.com/gpu": "1"
 }
 
 // TtydConfig holds ttyd (Web-based terminal) configuration

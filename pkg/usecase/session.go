@@ -26,6 +26,7 @@ type StartSessionOptions struct {
 	Namespace       string
 	CPU             string
 	Memory          string
+	CustomResources map[string]string // e.g., "nvidia.com/gpu": "1"
 	Branch          string
 	KubeconfigPath  string
 	Prompt          string
@@ -112,6 +113,12 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	namespace := opts.Namespace
 	cpu := opts.CPU
 	memory := opts.Memory
+	customResources := make(map[string]string)
+	if opts.CustomResources != nil {
+		for k, v := range opts.CustomResources {
+			customResources[k] = v
+		}
+	}
 	image := opts.Image
 	gitSecret := opts.GitSecret
 	branch := opts.Branch
@@ -143,6 +150,14 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	if memory == "" {
 		memory = globalConfig.Defaults.Resources.Memory
 	}
+	// Merge custom resources from global config
+	if globalConfig.Defaults.Resources.CustomResources != nil {
+		for k, v := range globalConfig.Defaults.Resources.CustomResources {
+			if _, exists := customResources[k]; !exists {
+				customResources[k] = v
+			}
+		}
+	}
 	if image == "" {
 		image = globalConfig.Defaults.Image
 	}
@@ -160,6 +175,14 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 		if memory == "" && templateConfig.Resources.Memory != "" {
 			memory = templateConfig.Resources.Memory
+		}
+		// Merge custom resources from template config (overrides global)
+		if templateConfig.Resources.CustomResources != nil {
+			for k, v := range templateConfig.Resources.CustomResources {
+				if _, exists := customResources[k]; !exists || opts.CustomResources == nil {
+					customResources[k] = v
+				}
+			}
 		}
 		if image == "" && templateConfig.Image != "" {
 			image = templateConfig.Image
@@ -279,8 +302,9 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		UpdatedAt:  now,
 		AutoBranch: true, // Enable automatic branch management by default
 		Resources: config.ResourceConfig{
-			CPU:    cpu,
-			Memory: memory,
+			CPU:             cpu,
+			Memory:          memory,
+			CustomResources: customResources,
 		},
 		Ttyd: config.TtydConfig{
 			Enabled:  &ttydEnabled,
@@ -387,13 +411,14 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	}
 
 	podSpec := &kubernetes.PodSpec{
-		Name:          session.PodName,
-		Namespace:     namespace,
-		Image:         effectiveImage,
-		CPULimit:      cpu,
-		MemoryLimit:   memory,
-		GitSecretName: effectiveGitSecret,
-		Command:       effectiveCommand,
+		Name:            session.PodName,
+		Namespace:       namespace,
+		Image:           effectiveImage,
+		CPULimit:        cpu,
+		MemoryLimit:     memory,
+		CustomResources: customResources,
+		GitSecretName:   effectiveGitSecret,
+		Command:         effectiveCommand,
 
 		// Git configuration for workspace-initializer init container
 		GitRepo:         repo,

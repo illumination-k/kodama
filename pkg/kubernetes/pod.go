@@ -167,7 +167,7 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 					Image:      spec.Image,
 					Command:    containerCommand,
 					WorkingDir: "/workspace",
-					Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit),
+					Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit, spec.CustomResources),
 				},
 			},
 			RestartPolicy: corev1.RestartPolicyNever,
@@ -294,8 +294,8 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 	return nil
 }
 
-// buildResourceRequirements creates resource requirements from CPU and memory limits
-func (c *Client) buildResourceRequirements(cpu, memory string) corev1.ResourceRequirements {
+// buildResourceRequirements creates resource requirements from CPU, memory, and custom resource limits
+func (c *Client) buildResourceRequirements(cpu, memory string, customResources map[string]string) corev1.ResourceRequirements {
 	requirements := corev1.ResourceRequirements{
 		Limits:   corev1.ResourceList{},
 		Requests: corev1.ResourceList{},
@@ -320,6 +320,17 @@ func (c *Client) buildResourceRequirements(cpu, memory string) corev1.ResourceRe
 			requestMem := memQuantity.DeepCopy()
 			requestMem.Set(requestMem.Value() / 2)
 			requirements.Requests[corev1.ResourceMemory] = requestMem
+		}
+	}
+
+	// Add custom resources (e.g., nvidia.com/gpu, amd.com/gpu, etc.)
+	for resourceName, quantity := range customResources {
+		parsedQuantity, err := resource.ParseQuantity(quantity)
+		if err == nil {
+			// Custom resources like GPUs are typically only set in limits
+			// and automatically mirrored to requests by Kubernetes
+			requirements.Limits[corev1.ResourceName(resourceName)] = parsedQuantity
+			requirements.Requests[corev1.ResourceName(resourceName)] = parsedQuantity
 		}
 	}
 

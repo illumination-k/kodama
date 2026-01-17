@@ -19,15 +19,16 @@ type Config struct {
 
 // PodSpec contains specifications for creating a pod
 type PodSpec struct {
-	Name          string
-	Namespace     string
-	Image         string
-	WorkspacePVC  string
-	ClaudeHomePVC string
-	CPULimit      string
-	MemoryLimit   string
-	GitSecretName string
-	Command       []string
+	Name            string
+	Namespace       string
+	Image           string
+	WorkspacePVC    string
+	ClaudeHomePVC   string
+	CPULimit        string
+	MemoryLimit     string
+	CustomResources map[string]string // e.g., "nvidia.com/gpu": "1"
+	GitSecretName   string
+	Command         []string
 
 	// Claude authentication
 	ClaudeAuthType   string            // "token", "file"
