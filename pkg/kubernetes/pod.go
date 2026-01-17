@@ -17,7 +17,7 @@ import (
 // buildInitContainers creates all required init containers based on PodSpec
 func buildInitContainers(spec *PodSpec) []corev1.Container {
 	builder := initcontainer.NewBuilder()
-	containers := []corev1.Container{}
+	containers := make([]corev1.Container, 0, 2) // Pre-allocate for tools-installer + workspace-initializer
 
 	// Combine tool installers (Claude + ttyd) into a single init container for efficiency
 	toolConfigs := []initcontainer.InstallerConfig{

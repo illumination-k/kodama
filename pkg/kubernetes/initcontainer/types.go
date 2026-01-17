@@ -64,8 +64,7 @@ func (b *Builder) BuildCombined(name string, configs ...InstallerConfig) corev1.
 	command := configs[0].Command()
 
 	// Combine all scripts into one
-	var combinedScript string
-	combinedScript = "set -e\n"
+	combinedScript := "set -e\n"
 
 	for _, config := range configs {
 		// Extract the actual commands from each installer's script
@@ -134,8 +133,8 @@ func mergeVolumeMounts(configs []InstallerConfig) []corev1.VolumeMount {
 	}
 
 	result := make([]corev1.VolumeMount, 0, len(seen))
-	for _, mount := range seen {
-		result = append(result, mount)
+	for name := range seen {
+		result = append(result, seen[name])
 	}
 
 	return result
@@ -154,14 +153,15 @@ func mergeEnvVars(configs []InstallerConfig) []corev1.EnvVar {
 	}
 
 	result := make([]corev1.EnvVar, 0, len(seen))
-	for _, envVar := range seen {
-		result = append(result, envVar)
+	for name := range seen {
+		result = append(result, seen[name])
 	}
 
 	return result
 }
 
-// Helper functions to avoid importing strings package
+// splitLines splits a string into lines by newline characters.
+// This is a helper function to avoid importing the strings package.
 func splitLines(s string) []string {
 	var lines []string
 	start := 0
@@ -177,21 +177,30 @@ func splitLines(s string) []string {
 	return lines
 }
 
+// trimSpace removes leading and trailing whitespace from a string.
+// This is a helper function to avoid importing the strings package.
 func trimSpace(s string) string {
 	start := 0
 	end := len(s)
 
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+	for start < end && isSpace(s[start]) {
 		start++
 	}
 
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+	for end > start && isSpace(s[end-1]) {
 		end--
 	}
 
 	return s[start:end]
 }
 
+// isSpace checks if a byte is a whitespace character.
+func isSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+// startsWith checks if a string starts with a given prefix.
+// This is a helper function to avoid importing the strings package.
 func startsWith(s, prefix string) bool {
 	if len(s) < len(prefix) {
 		return false
