@@ -141,3 +141,143 @@ func TestNewBuilder(t *testing.T) {
 		t.Error("NewBuilder should return non-nil builder")
 	}
 }
+
+func TestBuildCombined(t *testing.T) {
+	builder := NewBuilder()
+
+	claudeConfig := NewClaudeInstallerConfig("latest", "kodama-bin")
+	ttydConfig := NewTtydInstallerConfig("1.7.7", "kodama-bin")
+
+	container := builder.BuildCombined("tools-installer", claudeConfig, ttydConfig)
+
+	// Verify container name
+	if container.Name != "tools-installer" {
+		t.Errorf("Expected container name 'tools-installer', got '%s'", container.Name)
+	}
+
+	// Verify image (should use first config's image)
+	if container.Image != "ubuntu:24.04" {
+		t.Errorf("Expected container image 'ubuntu:24.04', got '%s'", container.Image)
+	}
+
+	// Verify command
+	if len(container.Command) != 2 || container.Command[0] != "/bin/bash" || container.Command[1] != "-c" {
+		t.Errorf("Expected [/bin/bash -c], got %v", container.Command)
+	}
+
+	// Verify combined script contains both installers' messages
+	if len(container.Args) != 1 {
+		t.Fatalf("Expected 1 arg, got %d", len(container.Args))
+	}
+
+	script := container.Args[0]
+
+	// Check for Claude installer messages
+	if !strings.Contains(script, "Installing Claude Code CLI...") {
+		t.Error("Combined script missing Claude installer start message")
+	}
+	if !strings.Contains(script, "Claude Code installation complete") {
+		t.Error("Combined script missing Claude installer completion message")
+	}
+
+	// Check for ttyd installer messages
+	if !strings.Contains(script, "Installing ttyd...") {
+		t.Error("Combined script missing ttyd installer start message")
+	}
+	if !strings.Contains(script, "ttyd installation complete") {
+		t.Error("Combined script missing ttyd installer completion message")
+	}
+
+	// Verify volume mounts are merged (both use kodama-bin)
+	if len(container.VolumeMounts) != 1 {
+		t.Errorf("Expected 1 volume mount (deduplicated), got %d", len(container.VolumeMounts))
+	}
+
+	if container.VolumeMounts[0].Name != "kodama-bin" {
+		t.Errorf("Expected volume mount 'kodama-bin', got '%s'", container.VolumeMounts[0].Name)
+	}
+}
+
+func TestBuildCombinedEmpty(t *testing.T) {
+	builder := NewBuilder()
+	container := builder.BuildCombined("empty-installer")
+
+	if container.Name != "empty-installer" {
+		t.Errorf("Expected container name 'empty-installer', got '%s'", container.Name)
+	}
+}
+
+func TestBuildCombinedSingle(t *testing.T) {
+	builder := NewBuilder()
+	claudeConfig := NewClaudeInstallerConfig("latest", "kodama-bin")
+
+	container := builder.BuildCombined("single-installer", claudeConfig)
+
+	if container.Name != "single-installer" {
+		t.Errorf("Expected container name 'single-installer', got '%s'", container.Name)
+	}
+
+	if len(container.Args) != 1 {
+		t.Fatalf("Expected 1 arg, got %d", len(container.Args))
+	}
+
+	script := container.Args[0]
+	if !strings.Contains(script, "Installing Claude Code CLI...") {
+		t.Error("Script missing Claude installer start message")
+	}
+}
+
+func TestExtractCommands(t *testing.T) {
+	script := `set -e
+echo "Starting..."
+apt-get update
+apt-get install -y curl
+echo "Done"`
+
+	commands := extractCommands(script)
+
+	expected := []string{
+		"apt-get update",
+		"apt-get install -y curl",
+	}
+
+	if len(commands) != len(expected) {
+		t.Errorf("Expected %d commands, got %d", len(expected), len(commands))
+	}
+
+	for i, cmd := range expected {
+		if i >= len(commands) || commands[i] != cmd {
+			t.Errorf("Expected command[%d] = '%s', got '%s'", i, cmd, commands[i])
+		}
+	}
+}
+
+func TestMergeVolumeMounts(t *testing.T) {
+	claudeConfig := NewClaudeInstallerConfig("latest", "kodama-bin")
+	ttydConfig := NewTtydInstallerConfig("1.7.7", "kodama-bin")
+
+	configs := []InstallerConfig{claudeConfig, ttydConfig}
+	mounts := mergeVolumeMounts(configs)
+
+	// Both use the same volume, should be deduplicated
+	if len(mounts) != 1 {
+		t.Errorf("Expected 1 volume mount (deduplicated), got %d", len(mounts))
+	}
+
+	if mounts[0].Name != "kodama-bin" {
+		t.Errorf("Expected volume mount 'kodama-bin', got '%s'", mounts[0].Name)
+	}
+}
+
+func TestMergeEnvVars(t *testing.T) {
+	claudeConfig := NewClaudeInstallerConfig("latest", "kodama-bin")
+	ttydConfig := NewTtydInstallerConfig("1.7.7", "kodama-bin")
+
+	configs := []InstallerConfig{claudeConfig, ttydConfig}
+	envVars := mergeEnvVars(configs)
+
+	// Neither installer has env vars
+	if len(envVars) != 0 {
+		t.Errorf("Expected 0 env vars, got %d", len(envVars))
+	}
+}

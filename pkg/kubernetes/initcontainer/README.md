@@ -38,12 +38,28 @@ type InstallerConfig interface {
 
 ### Builder
 
-The `Builder` takes an `InstallerConfig` and produces a `corev1.Container`:
+The `Builder` takes installer configs and produces Kubernetes init containers:
 
+**Single installer:**
 ```go
 builder := initcontainer.NewBuilder()
 container := builder.Build(config)
 ```
+
+**Combined installers (recommended for efficiency):**
+```go
+builder := initcontainer.NewBuilder()
+configs := []initcontainer.InstallerConfig{
+    initcontainer.NewClaudeInstallerConfig("latest", "kodama-bin"),
+    initcontainer.NewTtydInstallerConfig("1.7.7", "kodama-bin"),
+}
+container := builder.BuildCombined("tools-installer", configs...)
+```
+
+`BuildCombined` merges multiple installers into a single init container, which is more efficient than creating separate containers. It automatically:
+- Combines scripts sequentially with proper logging
+- Deduplicates volume mounts and environment variables
+- Uses the first config's image and command
 
 ### BuildScript Utility
 
@@ -171,9 +187,10 @@ func (m *MyInstallerConfig) CompletionMessage() string {
 
 ## Benefits of This Design
 
-1. **Scalability**: Easy to add new installers without modifying existing code
-2. **Testability**: Each installer can be unit tested independently
-3. **Configurability**: Version and other options configurable per session
-4. **Consistency**: Standardized logging and error handling
-5. **Maintainability**: Clear separation of concerns
-6. **Extensibility**: Simple interface makes extension straightforward
+1. **Efficiency**: `BuildCombined` reduces init container count and startup time
+2. **Scalability**: Easy to add new installers without modifying existing code
+3. **Testability**: Each installer can be unit tested independently
+4. **Configurability**: Version and other options configurable per session
+5. **Consistency**: Standardized logging and error handling
+6. **Maintainability**: Clear separation of concerns
+7. **Extensibility**: Simple interface makes extension straightforward

@@ -148,17 +148,17 @@ CLI flags override template config (`.kodama.yaml` in repo), which overrides glo
 
 ### Init Container Strategy
 
-Pods use multiple init containers for setup, built using a config-based architecture:
+Pods use init containers for setup, built using a config-based architecture:
 
-1. **claude-installer**: Downloads Claude Code CLI using `ClaudeInstallerConfig`
-2. **ttyd-installer**: Installs web terminal (if enabled) using `TtydInstallerConfig`
-3. **workspace-initializer**: Git clone with token injection and branch setup using `WorkspaceInitializerConfig`
+1. **tools-installer**: Combined installer for Claude Code CLI and ttyd (if enabled) - more efficient than separate containers
+2. **workspace-initializer**: Git clone with token injection and branch setup (if repo specified)
 
-The config-based design (`pkg/kubernetes/initcontainer/`) makes it easy to:
-- Add new installers by implementing the `InstallerConfig` interface
-- Configure installer versions and options per session
-- Test each installer independently
-- Maintain consistent logging and error handling
+The config-based design (`pkg/kubernetes/initcontainer/`) provides:
+- **BuildCombined**: Merges multiple installers into a single init container for efficiency
+- **InstallerConfig interface**: Add new tools by implementing this interface
+- **Independent testing**: Each installer config can be unit tested
+- **Configurable versions**: Tool versions and options configurable per session
+- **Consistent logging**: Standardized start/completion messages across all installers
 
 ### Deferred Cleanup
 

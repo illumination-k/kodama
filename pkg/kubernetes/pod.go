@@ -19,15 +19,16 @@ func buildInitContainers(spec *PodSpec) []corev1.Container {
 	builder := initcontainer.NewBuilder()
 	containers := []corev1.Container{}
 
-	// Always add Claude installer
-	claudeConfig := initcontainer.NewClaudeInstallerConfig("latest", "kodama-bin")
-	containers = append(containers, builder.Build(claudeConfig))
-
-	// Add ttyd installer if enabled
-	if spec.TtydEnabled {
-		ttydConfig := initcontainer.NewTtydInstallerConfig("1.7.7", "kodama-bin")
-		containers = append(containers, builder.Build(ttydConfig))
+	// Combine tool installers (Claude + ttyd) into a single init container for efficiency
+	toolConfigs := []initcontainer.InstallerConfig{
+		initcontainer.NewClaudeInstallerConfig("latest", "kodama-bin"),
 	}
+
+	if spec.TtydEnabled {
+		toolConfigs = append(toolConfigs, initcontainer.NewTtydInstallerConfig("1.7.7", "kodama-bin"))
+	}
+
+	containers = append(containers, builder.BuildCombined("tools-installer", toolConfigs...))
 
 	// Add workspace initializer if git repo specified
 	if spec.GitRepo != "" {
