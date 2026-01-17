@@ -99,6 +99,19 @@ Kubernetes abstraction layer:
 - Port forwarding for ttyd web terminal
 - Command execution wrapper (kubectl exec)
 
+#### `pkg/kubernetes/initcontainer/`
+
+Config-based init container builder system:
+
+- **InstallerConfig interface**: Common interface for all init container installers
+- **Builder**: Converts installer configs to Kubernetes init containers
+- **ClaudeInstaller**: Claude Code CLI installation with configurable version
+- **TtydInstaller**: ttyd web terminal installation with configurable version
+- **WorkspaceInitializer**: Git clone with branch setup and auth injection
+- **BuildScript utility**: Generates bash scripts with consistent logging
+- Pluggable design allows easy addition of new installers
+- Each installer encapsulates: image, commands, volume mounts, env vars, and logging messages
+
 #### `pkg/gitcmd/`
 
 Git initialization script builder:
@@ -135,11 +148,17 @@ CLI flags override template config (`.kodama.yaml` in repo), which overrides glo
 
 ### Init Container Strategy
 
-Pods use multiple init containers for setup:
+Pods use multiple init containers for setup, built using a config-based architecture:
 
-1. **claude-installer**: Downloads Claude Code CLI
-2. **ttyd-installer**: Installs web terminal (if enabled)
-3. **workspace-initializer**: Git clone with token injection and branch setup
+1. **claude-installer**: Downloads Claude Code CLI using `ClaudeInstallerConfig`
+2. **ttyd-installer**: Installs web terminal (if enabled) using `TtydInstallerConfig`
+3. **workspace-initializer**: Git clone with token injection and branch setup using `WorkspaceInitializerConfig`
+
+The config-based design (`pkg/kubernetes/initcontainer/`) makes it easy to:
+- Add new installers by implementing the `InstallerConfig` interface
+- Configure installer versions and options per session
+- Test each installer independently
+- Maintain consistent logging and error handling
 
 ### Deferred Cleanup
 
@@ -273,6 +292,30 @@ Tracks complete session state including pod, PVCs, git info, sync status, agent 
 ## Extension Points
 
 To add new features:
+
+### New Init Container Installer
+
+Implement `initcontainer.InstallerConfig` interface in `pkg/kubernetes/initcontainer/`. Example:
+
+```go
+type MyInstallerConfig struct {
+    Version       string
+    BinVolumeName string
+}
+
+func (m *MyInstallerConfig) Name() string { return "my-installer" }
+func (m *MyInstallerConfig) Image() string { return "ubuntu:24.04" }
+func (m *MyInstallerConfig) Command() []string { return []string{"/bin/bash", "-c"} }
+func (m *MyInstallerConfig) Args() []string {
+    return []string{BuildScript("Installing...", "Done", "apt-get install -y mytool")}
+}
+func (m *MyInstallerConfig) VolumeMounts() []corev1.VolumeMount { /* ... */ }
+func (m *MyInstallerConfig) EnvVars() []corev1.EnvVar { return []corev1.EnvVar{} }
+func (m *MyInstallerConfig) StartMessage() string { return "Installing..." }
+func (m *MyInstallerConfig) CompletionMessage() string { return "Done" }
+```
+
+Then add to `buildInitContainers()` in `pkg/kubernetes/pod.go`.
 
 ### New Sync Implementation
 
