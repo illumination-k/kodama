@@ -315,7 +315,7 @@ func TestConfigResolver_Resolve_SyncConfig(t *testing.T) {
 			UseGitignore: &useGitignoreTrue,
 			Exclude:      []string{"*.log"},
 			CustomDirs: []CustomDirSync{
-				{LocalPath: "~/.config", RemotePath: "/home/user/.config"},
+				{Source: "~/.config", Destination: "/home/user/.config"},
 			},
 		},
 	}
@@ -325,7 +325,7 @@ func TestConfigResolver_Resolve_SyncConfig(t *testing.T) {
 			UseGitignore: &useGitignoreFalse,
 			Exclude:      []string{"*.tmp", "build/"},
 			CustomDirs: []CustomDirSync{
-				{LocalPath: "~/.ssh", RemotePath: "/home/user/.ssh"},
+				{Source: "~/.ssh", Destination: "/home/user/.ssh"},
 			},
 		},
 	}
@@ -346,8 +346,8 @@ func TestConfigResolver_Resolve_SyncConfig(t *testing.T) {
 	if len(resolved.SyncCustomDirs) != 1 {
 		t.Errorf("expected 1 custom dir, got %d", len(resolved.SyncCustomDirs))
 	}
-	if resolved.SyncCustomDirs[0].LocalPath != "~/.ssh" {
-		t.Errorf("expected custom dir '~/.ssh', got '%s'", resolved.SyncCustomDirs[0].LocalPath)
+	if resolved.SyncCustomDirs[0].Source != "~/.ssh" {
+		t.Errorf("expected custom dir source '~/.ssh', got '%s'", resolved.SyncCustomDirs[0].Source)
 	}
 }
 
