@@ -98,64 +98,47 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 
 	// Layer 2: Apply template config (overrides global)
 	if r.template != nil {
-		if r.template.Namespace != "" {
-			resolved.Namespace = r.template.Namespace
+		// Apply string fields using coalesce
+		resolved.Namespace = CoalesceString(r.template.Namespace, resolved.Namespace)
+		resolved.Image = CoalesceString(r.template.Image, resolved.Image)
+		resolved.CPU = CoalesceString(r.template.Resources.CPU, resolved.CPU)
+		resolved.Memory = CoalesceString(r.template.Resources.Memory, resolved.Memory)
+		resolved.GitSecret = CoalesceString(r.template.GitSecret, resolved.GitSecret)
+		resolved.Branch = CoalesceString(r.template.Branch, resolved.Branch)
+		resolved.GitCloneArgs = CoalesceString(r.template.GitClone.ExtraArgs, resolved.GitCloneArgs)
+		resolved.Repo = CoalesceString(r.template.Repo, resolved.Repo)
+
+		// Apply int fields
+		resolved.CloneDepth = CoalesceInt(r.template.GitClone.Depth, resolved.CloneDepth)
+		resolved.TtydPort = CoalesceInt(r.template.Ttyd.Port, resolved.TtydPort)
+
+		// Apply bool fields (SingleBranch: true means explicitly set)
+		resolved.SingleBranch = CoalesceBool(r.template.GitClone.SingleBranch, resolved.SingleBranch, r.template.GitClone.SingleBranch)
+
+		// Apply *bool fields (nil check required)
+		if r.template.Ttyd.Enabled != nil {
+			resolved.TtydEnabled = *r.template.Ttyd.Enabled
 		}
-		if r.template.Image != "" {
-			resolved.Image = r.template.Image
-		}
-		if r.template.Resources.CPU != "" {
-			resolved.CPU = r.template.Resources.CPU
-		}
-		if r.template.Resources.Memory != "" {
-			resolved.Memory = r.template.Resources.Memory
+		if r.template.Ttyd.Writable != nil {
+			resolved.TtydWritable = *r.template.Ttyd.Writable
 		}
 
-		// Merge custom resources from template (overrides global)
+		// Apply ttyd options
+		resolved.TtydOptions = CoalesceString(r.template.Ttyd.Options, resolved.TtydOptions)
+
+		// Custom resources: merge with template overriding
 		if r.template.Resources.CustomResources != nil {
 			for k, v := range r.template.Resources.CustomResources {
 				resolved.CustomResources[k] = v
 			}
 		}
 
-		if r.template.GitSecret != "" {
-			resolved.GitSecret = r.template.GitSecret
-		}
-		if r.template.Branch != "" {
-			resolved.Branch = r.template.Branch
-		}
-		if r.template.GitClone.Depth > 0 {
-			resolved.CloneDepth = r.template.GitClone.Depth
-		}
-		if r.template.GitClone.SingleBranch {
-			resolved.SingleBranch = r.template.GitClone.SingleBranch
-		}
-		if r.template.GitClone.ExtraArgs != "" {
-			resolved.GitCloneArgs = r.template.GitClone.ExtraArgs
-		}
-		if r.template.Repo != "" {
-			resolved.Repo = r.template.Repo
-		}
+		// Command: convert []string to string if provided
 		if len(r.template.Command) > 0 {
-			// Convert []string to space-separated string
 			resolved.Command = joinCommand(r.template.Command)
 		}
 
-		// Ttyd config from template
-		if r.template.Ttyd.Enabled != nil {
-			resolved.TtydEnabled = *r.template.Ttyd.Enabled
-		}
-		if r.template.Ttyd.Port != 0 {
-			resolved.TtydPort = r.template.Ttyd.Port
-		}
-		if r.template.Ttyd.Options != "" {
-			resolved.TtydOptions = r.template.Ttyd.Options
-		}
-		if r.template.Ttyd.Writable != nil {
-			resolved.TtydWritable = *r.template.Ttyd.Writable
-		}
-
-		// Sync config from template (overrides global)
+		// Sync config: template completely replaces global (not merged)
 		if len(r.template.Sync.Exclude) > 0 {
 			resolved.SyncExclude = r.template.Sync.Exclude
 		}
@@ -165,6 +148,8 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		if len(r.template.Sync.CustomDirs) > 0 {
 			resolved.SyncCustomDirs = r.template.Sync.CustomDirs
 		}
+
+		// ClaudeAuth: template overrides if provided
 		if r.template.ClaudeAuth != nil {
 			resolved.ClaudeAuth = r.template.ClaudeAuth
 		}
