@@ -1,0 +1,17 @@
+# GPU Resources Template
+# Usage: kubectl kodama start my-session --config examples/.kodama/templates/gpu-resources.yaml
+
+# For GPU-accelerated workloads (machine learning, rendering, etc.)
+resources:
+  cpu: "4"
+  memory: "16Gi"
+  customResources:
+    # NVIDIA GPU - adjust quantity as needed
+    nvidia.com/gpu: "1"
+    # Alternatively, for AMD GPUs:
+    # amd.com/gpu: "1"
+    # Or Intel GPUs:
+    # gpu.intel.com/i915: "1"
+
+# You can still override specific values with CLI flags
+# Example: kubectl kodama start gpu-task --config this-file.yaml --resource nvidia.com/gpu=2
