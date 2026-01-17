@@ -108,132 +108,101 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 	}
 
-	// 3. Apply defaults with 4-tier priority merge
+	// 3. Resolve config with 3-tier priority merge
+	// Step 1: Merge global + template configs (done in config package)
+	// Step 2: Apply CLI flags (done here in usecase)
 	// Priority: CLI flags > Template config > Global config > Hardcoded defaults
+
+	// Use ConfigResolver to merge global and template configs
+	resolver := config.NewConfigResolver(globalConfig, templateConfig)
+	resolved := resolver.Resolve()
+
+	// Apply CLI flag overrides (highest priority)
 	namespace := opts.Namespace
+	if namespace == "" {
+		namespace = resolved.Namespace
+	}
+
 	cpu := opts.CPU
+	if cpu == "" {
+		cpu = resolved.CPU
+	}
+
 	memory := opts.Memory
+	if memory == "" {
+		memory = resolved.Memory
+	}
+
+	// Merge custom resources: CLI > resolved
 	customResources := make(map[string]string)
+	// Start with resolved resources
+	for k, v := range resolved.CustomResources {
+		customResources[k] = v
+	}
+	// Override with CLI resources
 	if opts.CustomResources != nil {
 		for k, v := range opts.CustomResources {
 			customResources[k] = v
 		}
 	}
+
 	image := opts.Image
-	gitSecret := opts.GitSecret
-	branch := opts.Branch
-	cloneDepth := opts.CloneDepth
-	singleBranch := opts.SingleBranch
-	gitCloneArgs := opts.GitCloneArgs
-	repo := opts.Repo
-	command := opts.Command
-	// Default ttyd to true if not explicitly set in global config
-	ttydEnabled := true
-	if globalConfig.Defaults.Ttyd.Enabled != nil {
-		ttydEnabled = *globalConfig.Defaults.Ttyd.Enabled
-	}
-	ttydPort := globalConfig.Defaults.Ttyd.Port
-	ttydOptions := globalConfig.Defaults.Ttyd.Options
-	// Default ttyd writable to true if not explicitly set in global config
-	ttydWritable := true
-	if globalConfig.Defaults.Ttyd.Writable != nil {
-		ttydWritable = *globalConfig.Defaults.Ttyd.Writable
-	}
-
-	// Layer 1: Apply global config defaults (if CLI flag is empty)
-	if namespace == "" {
-		namespace = globalConfig.Defaults.Namespace
-	}
-	if cpu == "" {
-		cpu = globalConfig.Defaults.Resources.CPU
-	}
-	if memory == "" {
-		memory = globalConfig.Defaults.Resources.Memory
-	}
-	// Merge custom resources from global config
-	if globalConfig.Defaults.Resources.CustomResources != nil {
-		for k, v := range globalConfig.Defaults.Resources.CustomResources {
-			if _, exists := customResources[k]; !exists {
-				customResources[k] = v
-			}
-		}
-	}
 	if image == "" {
-		image = globalConfig.Defaults.Image
+		image = resolved.Image
 	}
+
+	gitSecret := opts.GitSecret
 	if gitSecret == "" {
-		gitSecret = globalConfig.Git.SecretName
+		gitSecret = resolved.GitSecret
 	}
 
-	// Layer 2: Apply template config (if --config specified and CLI flag is empty)
-	if templateConfig != nil {
-		if namespace == "" && templateConfig.Namespace != "" {
-			namespace = templateConfig.Namespace
-		}
-		if cpu == "" && templateConfig.Resources.CPU != "" {
-			cpu = templateConfig.Resources.CPU
-		}
-		if memory == "" && templateConfig.Resources.Memory != "" {
-			memory = templateConfig.Resources.Memory
-		}
-		// Merge custom resources from template config (overrides global)
-		if templateConfig.Resources.CustomResources != nil {
-			for k, v := range templateConfig.Resources.CustomResources {
-				if _, exists := customResources[k]; !exists || opts.CustomResources == nil {
-					customResources[k] = v
-				}
-			}
-		}
-		if image == "" && templateConfig.Image != "" {
-			image = templateConfig.Image
-		}
-		if gitSecret == "" && templateConfig.GitSecret != "" {
-			gitSecret = templateConfig.GitSecret
-		}
-		if branch == "" && templateConfig.Branch != "" {
-			branch = templateConfig.Branch
-		}
-		if cloneDepth == 0 && templateConfig.GitClone.Depth > 0 {
-			cloneDepth = templateConfig.GitClone.Depth
-		}
-		if !singleBranch && templateConfig.GitClone.SingleBranch {
-			singleBranch = templateConfig.GitClone.SingleBranch
-		}
-		if gitCloneArgs == "" && templateConfig.GitClone.ExtraArgs != "" {
-			gitCloneArgs = templateConfig.GitClone.ExtraArgs
-		}
-		if repo == "" && templateConfig.Repo != "" {
-			repo = templateConfig.Repo
-		}
-		if command == "" && len(templateConfig.Command) > 0 {
-			command = strings.Join(templateConfig.Command, " ")
-		}
-		// Apply template ttyd config
-		if templateConfig.Ttyd.Enabled != nil {
-			ttydEnabled = *templateConfig.Ttyd.Enabled
-		}
-		if templateConfig.Ttyd.Port != 0 {
-			ttydPort = templateConfig.Ttyd.Port
-		}
-		if templateConfig.Ttyd.Options != "" {
-			ttydOptions = templateConfig.Ttyd.Options
-		}
-		if templateConfig.Ttyd.Writable != nil {
-			ttydWritable = *templateConfig.Ttyd.Writable
-		}
+	branch := opts.Branch
+	if branch == "" {
+		branch = resolved.Branch
 	}
 
-	// Layer 3: CLI flags (already set, highest priority - no override needed)
-	// Apply CLI flag ttyd overrides
+	cloneDepth := opts.CloneDepth
+	if cloneDepth == 0 {
+		cloneDepth = resolved.CloneDepth
+	}
+
+	singleBranch := opts.SingleBranch
+	if !singleBranch {
+		singleBranch = resolved.SingleBranch
+	}
+
+	gitCloneArgs := opts.GitCloneArgs
+	if gitCloneArgs == "" {
+		gitCloneArgs = resolved.GitCloneArgs
+	}
+
+	repo := opts.Repo
+	if repo == "" {
+		repo = resolved.Repo
+	}
+
+	command := opts.Command
+	if command == "" {
+		command = resolved.Command
+	}
+
+	// Ttyd config: CLI overrides resolved
+	ttydEnabled := resolved.TtydEnabled
 	if opts.TtydEnabled {
 		ttydEnabled = opts.TtydEnabledVal
 	}
+
+	ttydPort := resolved.TtydPort
 	if opts.TtydPort != 0 {
 		ttydPort = opts.TtydPort
 	}
+
+	ttydOptions := resolved.TtydOptions
 	if opts.TtydOptions != "" {
 		ttydOptions = opts.TtydOptions
 	}
+
+	ttydWritable := resolved.TtydWritable
 	if opts.TtydReadonlySet {
 		ttydWritable = !opts.TtydReadonly
 	}
@@ -318,20 +287,18 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		},
 	}
 
-	// Merge any additional template config fields not handled by CLI flags
-	if templateConfig != nil {
-		if len(templateConfig.Sync.Exclude) > 0 {
-			session.Sync.Exclude = templateConfig.Sync.Exclude
-		}
-		if templateConfig.Sync.UseGitignore != nil {
-			session.Sync.UseGitignore = templateConfig.Sync.UseGitignore
-		}
-		if len(templateConfig.Sync.CustomDirs) > 0 {
-			session.Sync.CustomDirs = templateConfig.Sync.CustomDirs
-		}
-		if templateConfig.ClaudeAuth != nil {
-			session.ClaudeAuth = templateConfig.ClaudeAuth
-		}
+	// Apply resolved sync config and claude auth (from global + template merge)
+	if len(resolved.SyncExclude) > 0 {
+		session.Sync.Exclude = resolved.SyncExclude
+	}
+	if resolved.SyncUseGitignore != nil {
+		session.Sync.UseGitignore = resolved.SyncUseGitignore
+	}
+	if len(resolved.SyncCustomDirs) > 0 {
+		session.Sync.CustomDirs = resolved.SyncCustomDirs
+	}
+	if resolved.ClaudeAuth != nil {
+		session.ClaudeAuth = resolved.ClaudeAuth
 	}
 
 	// Validate session
@@ -378,11 +345,8 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	// 9. Create pod
 	fmt.Println("⏳ Creating pod...")
 
-	// Determine which image to use: session config > global default
-	effectiveImage := globalConfig.Defaults.Image
-	if session.Image != "" {
-		effectiveImage = session.Image
-	}
+	// Use image from session config (already resolved from CLI > template > global)
+	effectiveImage := session.Image
 
 	// Validate image
 	if effectiveImage == "" {
@@ -391,11 +355,8 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		return nil, fmt.Errorf("container image is required. Specify via --image flag or set default in ~/.kodama/config.yaml")
 	}
 
-	// Determine which git secret to use: session config > global default
-	effectiveGitSecret := globalConfig.Git.SecretName
-	if session.GitSecret != "" {
-		effectiveGitSecret = session.GitSecret
-	}
+	// Use git secret from session config (already resolved from CLI > template > global)
+	effectiveGitSecret := session.GitSecret
 
 	// Determine branch name for init container (if repo mode)
 	effectiveBranch := branch
