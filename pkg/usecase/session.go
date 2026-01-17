@@ -117,95 +117,25 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	resolver := config.NewConfigResolver(globalConfig, templateConfig)
 	resolved := resolver.Resolve()
 
-	// Apply CLI flag overrides (highest priority)
-	namespace := opts.Namespace
-	if namespace == "" {
-		namespace = resolved.Namespace
-	}
-
-	cpu := opts.CPU
-	if cpu == "" {
-		cpu = resolved.CPU
-	}
-
-	memory := opts.Memory
-	if memory == "" {
-		memory = resolved.Memory
-	}
-
-	// Merge custom resources: CLI > resolved
-	customResources := make(map[string]string)
-	// Start with resolved resources
-	for k, v := range resolved.CustomResources {
-		customResources[k] = v
-	}
-	// Override with CLI resources
-	if opts.CustomResources != nil {
-		for k, v := range opts.CustomResources {
-			customResources[k] = v
-		}
-	}
-
-	image := opts.Image
-	if image == "" {
-		image = resolved.Image
-	}
-
-	gitSecret := opts.GitSecret
-	if gitSecret == "" {
-		gitSecret = resolved.GitSecret
-	}
-
-	branch := opts.Branch
-	if branch == "" {
-		branch = resolved.Branch
-	}
-
-	cloneDepth := opts.CloneDepth
-	if cloneDepth == 0 {
-		cloneDepth = resolved.CloneDepth
-	}
-
-	singleBranch := opts.SingleBranch
-	if !singleBranch {
-		singleBranch = resolved.SingleBranch
-	}
-
-	gitCloneArgs := opts.GitCloneArgs
-	if gitCloneArgs == "" {
-		gitCloneArgs = resolved.GitCloneArgs
-	}
-
-	repo := opts.Repo
-	if repo == "" {
-		repo = resolved.Repo
-	}
-
-	command := opts.Command
-	if command == "" {
-		command = resolved.Command
-	}
+	// Apply CLI flag overrides (highest priority) using coalesce helpers
+	namespace := config.CoalesceString(opts.Namespace, resolved.Namespace)
+	cpu := config.CoalesceString(opts.CPU, resolved.CPU)
+	memory := config.CoalesceString(opts.Memory, resolved.Memory)
+	customResources := config.CoalesceMap(opts.CustomResources, resolved.CustomResources)
+	image := config.CoalesceString(opts.Image, resolved.Image)
+	gitSecret := config.CoalesceString(opts.GitSecret, resolved.GitSecret)
+	branch := config.CoalesceString(opts.Branch, resolved.Branch)
+	cloneDepth := config.CoalesceInt(opts.CloneDepth, resolved.CloneDepth)
+	singleBranch := config.CoalesceBool(opts.SingleBranch, resolved.SingleBranch, opts.SingleBranch)
+	gitCloneArgs := config.CoalesceString(opts.GitCloneArgs, resolved.GitCloneArgs)
+	repo := config.CoalesceString(opts.Repo, resolved.Repo)
+	command := config.CoalesceString(opts.Command, resolved.Command)
 
 	// Ttyd config: CLI overrides resolved
-	ttydEnabled := resolved.TtydEnabled
-	if opts.TtydEnabled {
-		ttydEnabled = opts.TtydEnabledVal
-	}
-
-	ttydPort := resolved.TtydPort
-	if opts.TtydPort != 0 {
-		ttydPort = opts.TtydPort
-	}
-
-	ttydOptions := resolved.TtydOptions
-	if opts.TtydOptions != "" {
-		ttydOptions = opts.TtydOptions
-	}
-
-	ttydWritable := resolved.TtydWritable
-	if opts.TtydReadonlySet {
-		ttydWritable = !opts.TtydReadonly
-	}
+	ttydEnabled := config.CoalesceBool(opts.TtydEnabledVal, resolved.TtydEnabled, opts.TtydEnabled)
+	ttydPort := config.CoalesceInt(opts.TtydPort, resolved.TtydPort)
+	ttydOptions := config.CoalesceString(opts.TtydOptions, resolved.TtydOptions)
+	ttydWritable := config.CoalesceBool(!opts.TtydReadonly, resolved.TtydWritable, opts.TtydReadonlySet)
 
 	// Validate required fields after merge
 	if namespace == "" {
