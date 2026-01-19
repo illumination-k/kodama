@@ -92,10 +92,14 @@ func createDiffViewerSidecarContainer(spec *DiffViewerSpec) *corev1.Container {
 		WorkingDir: "/workspace",
 		Command:    []string{"/bin/sh", "-c"},
 		Args: []string{
-			`echo "Installing difit diff viewer..."
+			`set -e
+echo "Installing difit diff viewer..."
 npm install -g difit
-echo "Starting difit on port $DIFIT_PORT..."
-difit --port $DIFIT_PORT`,
+
+echo "Starting difit server on port $DIFIT_PORT..."
+cd /workspace
+# Use </dev/null to prevent stdin issues, default to HEAD
+difit HEAD --port $DIFIT_PORT --host 0.0.0.0 </dev/null`,
 		},
 		Env: []corev1.EnvVar{
 			{
