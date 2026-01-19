@@ -21,7 +21,7 @@ func CoalesceInt(cliValue, resolvedValue int) int {
 // CoalesceBool returns cliValue if condition is true, otherwise resolvedValue
 // condition should indicate whether the CLI flag was explicitly set
 // This is needed because bool's zero value (false) is a valid user choice
-func CoalesceBool(cliValue, resolvedValue bool, condition bool) bool {
+func CoalesceBool(cliValue, resolvedValue, condition bool) bool {
 	if condition {
 		return cliValue
 	}
@@ -39,10 +39,8 @@ func CoalesceMap(cliMap, resolvedMap map[string]string) map[string]string {
 	}
 
 	// Override with CLI map
-	if cliMap != nil {
-		for k, v := range cliMap {
-			result[k] = v
-		}
+	for k, v := range cliMap {
+		result[k] = v
 	}
 
 	return result

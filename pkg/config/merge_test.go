@@ -175,7 +175,7 @@ func TestCoalesceMap(t *testing.T) {
 			},
 		},
 		{
-			name: "CLI map empty",
+			name:   "CLI map empty",
 			cliMap: map[string]string{},
 			resolvedMap: map[string]string{
 				"key1": "resolved-value",

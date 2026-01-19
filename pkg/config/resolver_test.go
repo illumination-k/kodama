@@ -184,8 +184,8 @@ func TestConfigResolver_Resolve_CustomResourcesMerge(t *testing.T) {
 	template := &SessionConfig{
 		Resources: ResourceConfig{
 			CustomResources: map[string]string{
-				"nvidia.com/gpu":  "2", // Override global
-				"intel.com/fpga":  "1", // Add new
+				"nvidia.com/gpu": "2", // Override global
+				"intel.com/fpga": "1", // Add new
 				// amd.com/gpu not specified - should be overridden
 			},
 		},
