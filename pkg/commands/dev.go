@@ -3,37 +3,40 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/spf13/cobra"
 
 	"github.com/illumination-k/kodama/pkg/usecase"
-	"github.com/spf13/cobra"
 )
 
 // NewDevCommand creates a new dev command that combines start and attach
 func NewDevCommand() *cobra.Command {
 	var (
-		repo         string
-		syncPath     string
-		namespace    string
-		cpu          string
-		memory       string
-		branch       string
-		prompt       string
-		promptFile   string
-		image        string
-		command      string
-		gitSecret    string
-		cloneDepth   int
-		singleBranch bool
-		gitCloneArgs string
-		configFile   string
-		attachCmd    string
-		ttyMode      bool
-		localPort    int
-		noBrowser    bool
-		ttydEnabled  bool
-		ttydPort     int
-		ttydOptions  string
-		ttydReadonly bool
+		repo            string
+		syncPath        string
+		namespace       string
+		cpu             string
+		memory          string
+		customResources []string
+		branch          string
+		prompt          string
+		promptFile      string
+		image           string
+		command         string
+		gitSecret       string
+		cloneDepth      int
+		singleBranch    bool
+		gitCloneArgs    string
+		configFile      string
+		attachCmd       string
+		ttyMode         bool
+		localPort       int
+		noBrowser       bool
+		ttydEnabled     bool
+		ttydPort        int
+		ttydOptions     string
+		ttydReadonly    bool
 	)
 
 	cmd := &cobra.Command{
@@ -57,6 +60,16 @@ Examples:
 				return fmt.Errorf("cannot specify both --prompt and --prompt-file")
 			}
 
+			// Parse custom resources
+			customResourcesMap := make(map[string]string)
+			for _, res := range customResources {
+				parts := strings.Split(res, "=")
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid resource format: %s (expected format: resourceName=quantity, e.g., nvidia.com/gpu=1)", res)
+				}
+				customResourcesMap[parts[0]] = parts[1]
+			}
+
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
 			ctx := context.Background()
 
@@ -68,6 +81,7 @@ Examples:
 				Namespace:       namespace,
 				CPU:             cpu,
 				Memory:          memory,
+				CustomResources: customResourcesMap,
 				Branch:          branch,
 				KubeconfigPath:  kubeconfigPath,
 				Prompt:          prompt,
@@ -121,6 +135,7 @@ Examples:
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace")
 	cmd.Flags().StringVar(&cpu, "cpu", "", "CPU limit (e.g., '1', '2')")
 	cmd.Flags().StringVar(&memory, "memory", "", "Memory limit (e.g., '2Gi', '4Gi')")
+	cmd.Flags().StringSliceVar(&customResources, "resource", []string{}, "Custom resource (can be specified multiple times, e.g., --resource nvidia.com/gpu=1 --resource amd.com/gpu=2)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch to clone (default: repository default branch)")
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Prompt for coding agent")
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")

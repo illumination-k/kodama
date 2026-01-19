@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
 	"github.com/illumination-k/kodama/pkg/sync/exclude"
 )
 

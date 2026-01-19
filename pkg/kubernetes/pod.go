@@ -5,63 +5,46 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/illumination-k/kodama/pkg/gitcmd"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/utils/ptr"
+
+	"github.com/illumination-k/kodama/pkg/gitcmd"
+	"github.com/illumination-k/kodama/pkg/kubernetes/initcontainer"
 )
 
-// createClaudeInstallerInitContainer creates init container for Claude Code installation
-func createClaudeInstallerInitContainer() corev1.Container {
-	return corev1.Container{
-		Name:    "claude-installer",
-		Image:   "ubuntu:24.04",
-		Command: []string{"/bin/bash", "-c"},
-		Args: []string{
-			`set -e
-echo "Installing Claude Code CLI..."
-apt-get update -qq && apt-get install -y -qq curl ca-certificates
-curl -fsSL https://claude.ai/install.sh | bash -s latest
-echo "Copying binaries to /kodama/bin..."
-mkdir -p /kodama/bin
-cp -rL /root/.local/bin/* /kodama/bin/
-echo "Claude Code installation complete"`,
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "kodama-bin",
-				MountPath: "/kodama/bin",
-			},
-		},
-	}
-}
+// buildInitContainers creates all required init containers based on PodSpec
+func buildInitContainers(spec *PodSpec) []corev1.Container {
+	builder := initcontainer.NewBuilder()
+	containers := make([]corev1.Container, 0, 2) // Pre-allocate for tools-installer + workspace-initializer
 
-// createTtydInstallerInitContainer creates init container for ttyd installation
-func createTtydInstallerInitContainer() corev1.Container {
-	return corev1.Container{
-		Name:    "ttyd-installer",
-		Image:   "ubuntu:24.04",
-		Command: []string{"/bin/bash", "-c"},
-		Args: []string{
-			`set -e
-echo "Installing ttyd..."
-apt-get update -qq && apt-get install -y -qq curl ca-certificates
-curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /tmp/ttyd
-chmod +x /tmp/ttyd
-mkdir -p /kodama/bin
-cp /tmp/ttyd /kodama/bin/ttyd
-echo "ttyd installation complete"`,
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "kodama-bin",
-				MountPath: "/kodama/bin",
-			},
-		},
+	// Combine tool installers (Claude + ttyd) into a single init container for efficiency
+	toolConfigs := []initcontainer.InstallerConfig{
+		initcontainer.NewClaudeInstallerConfig("latest", "kodama-bin"),
 	}
+
+	if spec.TtydEnabled {
+		toolConfigs = append(toolConfigs, initcontainer.NewTtydInstallerConfig("1.7.7", "kodama-bin"))
+	}
+
+	containers = append(containers, builder.BuildCombined("tools-installer", toolConfigs...))
+
+	// Add workspace initializer if git repo specified
+	if spec.GitRepo != "" {
+		opts := &gitcmd.CloneOptions{
+			Depth:        spec.GitCloneDepth,
+			SingleBranch: spec.GitSingleBranch,
+			ExtraArgs:    spec.GitCloneArgs,
+		}
+		workspaceConfig := initcontainer.NewWorkspaceInitializerConfig(spec.GitRepo, spec.GitBranch, opts).
+			WithGitSecret(spec.GitSecretName).
+			WithWorkspaceVolume("workspace")
+		containers = append(containers, builder.Build(workspaceConfig))
+	}
+
+	return containers
 }
 
 // DefaultDiffViewerImage is the default container image for the difit diff viewer
@@ -123,71 +106,10 @@ difit HEAD --port $DIFIT_PORT --host 0.0.0.0 </dev/null`,
 	}
 }
 
-// createWorkspaceInitializerInitContainer creates init container for git operations
-func createWorkspaceInitializerInitContainer(spec *PodSpec) *corev1.Container {
-	// Skip if no repository specified
-	if spec.GitRepo == "" {
-		return nil
-	}
-
-	// Build git clone options from spec
-	opts := &gitcmd.CloneOptions{
-		Depth:        spec.GitCloneDepth,
-		SingleBranch: spec.GitSingleBranch,
-		ExtraArgs:    spec.GitCloneArgs,
-	}
-
-	// Build git initialization script using gitcmd package
-	initScript := gitcmd.BuildGitInitScript(spec.GitRepo, spec.GitBranch, opts)
-
-	container := corev1.Container{
-		Name:    "workspace-initializer",
-		Image:   "ubuntu:24.04",
-		Command: []string{"/bin/bash", "-c"},
-		Args:    []string{initScript},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "workspace",
-				MountPath: "/workspace",
-			},
-		},
-	}
-
-	// Add git token environment variable if available
-	if spec.GitSecretName != "" {
-		container.Env = append(container.Env, corev1.EnvVar{
-			Name: "GH_TOKEN",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: spec.GitSecretName,
-					},
-					Key:      "token",
-					Optional: ptr.To(true),
-				},
-			},
-		})
-	}
-
-	return &container
-}
-
 // CreatePod creates a new pod in the cluster
 func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
-	// Build init containers
-	initContainers := []corev1.Container{
-		createClaudeInstallerInitContainer(),
-	}
-
-	// Add ttyd installer if enabled
-	if spec.TtydEnabled {
-		initContainers = append(initContainers, createTtydInstallerInitContainer())
-	}
-
-	// Add workspace initializer if git repo specified
-	if workspaceInit := createWorkspaceInitializerInitContainer(spec); workspaceInit != nil {
-		initContainers = append(initContainers, *workspaceInit)
-	}
+	// Build init containers using the new config-based approach
+	initContainers := buildInitContainers(spec)
 
 	// Determine container command based on ttyd settings
 	containerCommand := spec.Command
@@ -216,7 +138,7 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 			Image:      spec.Image,
 			Command:    containerCommand,
 			WorkingDir: "/workspace",
-			Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit),
+			Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit, spec.CustomResources),
 		},
 	}
 
@@ -361,8 +283,8 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 	return nil
 }
 
-// buildResourceRequirements creates resource requirements from CPU and memory limits
-func (c *Client) buildResourceRequirements(cpu, memory string) corev1.ResourceRequirements {
+// buildResourceRequirements creates resource requirements from CPU, memory, and custom resource limits
+func (c *Client) buildResourceRequirements(cpu, memory string, customResources map[string]string) corev1.ResourceRequirements {
 	requirements := corev1.ResourceRequirements{
 		Limits:   corev1.ResourceList{},
 		Requests: corev1.ResourceList{},
@@ -387,6 +309,17 @@ func (c *Client) buildResourceRequirements(cpu, memory string) corev1.ResourceRe
 			requestMem := memQuantity.DeepCopy()
 			requestMem.Set(requestMem.Value() / 2)
 			requirements.Requests[corev1.ResourceMemory] = requestMem
+		}
+	}
+
+	// Add custom resources (e.g., nvidia.com/gpu, amd.com/gpu, etc.)
+	for resourceName, quantity := range customResources {
+		parsedQuantity, err := resource.ParseQuantity(quantity)
+		if err == nil {
+			// Custom resources like GPUs are typically only set in limits
+			// and automatically mirrored to requests by Kubernetes
+			requirements.Limits[corev1.ResourceName(resourceName)] = parsedQuantity
+			requirements.Requests[corev1.ResourceName(resourceName)] = parsedQuantity
 		}
 	}
 
