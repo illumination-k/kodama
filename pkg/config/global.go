@@ -2,10 +2,18 @@ package config
 
 // GlobalConfig represents global configuration for Kodama
 type GlobalConfig struct {
-	Defaults DefaultsConfig   `yaml:"defaults"`
-	Sync     GlobalSyncConfig `yaml:"sync,omitempty"`
-	Git      GitConfig        `yaml:"git,omitempty"`
-	Claude   ClaudeConfig     `yaml:"claude,omitempty"`
+	Defaults   DefaultsConfig         `yaml:"defaults"`
+	Sync       GlobalSyncConfig       `yaml:"sync,omitempty"`
+	Git        GitConfig              `yaml:"git,omitempty"`
+	Claude     ClaudeConfig           `yaml:"claude,omitempty"`
+	DiffViewer GlobalDiffViewerConfig `yaml:"diffViewer,omitempty"`
+}
+
+// GlobalDiffViewerConfig holds global diff viewer configuration
+type GlobalDiffViewerConfig struct {
+	Enabled bool   `yaml:"enabled,omitempty"` // Whether to enable diff viewer by default
+	Image   string `yaml:"image,omitempty"`   // Default container image for difit
+	Port    int32  `yaml:"port,omitempty"`    // Default port for difit web server
 }
 
 // DefaultsConfig holds default values for session creation

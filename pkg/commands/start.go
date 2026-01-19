@@ -33,6 +33,8 @@ func NewStartCommand() *cobra.Command {
 		ttydPort        int
 		ttydOptions     string
 		ttydReadonly    bool
+		diffViewer      bool
+		diffViewerPort  int
 	)
 
 	cmd := &cobra.Command{
@@ -90,6 +92,8 @@ Examples:
 				TtydOptions:     ttydOptions,
 				TtydReadonly:    ttydReadonly,
 				TtydReadonlySet: cmd.Flags().Changed("ttyd-readonly"),
+				DiffViewer:      diffViewer,
+				DiffViewerPort:  diffViewerPort,
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -121,6 +125,15 @@ Examples:
 				fmt.Println("   Tip: Use 'kubectl kodama attach --sync' for live sync during development")
 			}
 
+			if session.DiffViewer != nil && session.DiffViewer.Enabled {
+				port := session.DiffViewer.Port
+				if port == 0 {
+					port = 4966
+				}
+				fmt.Printf("\n🔍 Diff viewer enabled on port %d\n", port)
+				fmt.Printf("   Access via: kubectl port-forward -n %s %s %d:%d\n", session.Namespace, session.PodName, port, port)
+			}
+
 			return nil
 		},
 	}
@@ -146,6 +159,8 @@ Examples:
 	cmd.Flags().IntVar(&ttydPort, "ttyd-port", 0, "Ttyd port (default: 7681)")
 	cmd.Flags().StringVar(&ttydOptions, "ttyd-options", "", "Additional ttyd options")
 	cmd.Flags().BoolVar(&ttydReadonly, "ttyd-readonly", false, "Enable read-only mode for ttyd (disables terminal input)")
+	cmd.Flags().BoolVar(&diffViewer, "diff-viewer", false, "Enable difit diff viewer sidecar for reviewing changes")
+	cmd.Flags().IntVar(&diffViewerPort, "diff-viewer-port", 0, "Port for difit diff viewer (default: 4966)")
 
 	return cmd
 }

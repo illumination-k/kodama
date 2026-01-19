@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
@@ -44,6 +45,8 @@ type StartSessionOptions struct {
 	TtydOptions     string
 	TtydReadonly    bool
 	TtydReadonlySet bool
+	DiffViewer      bool
+	DiffViewerPort  int
 }
 
 // AttachSessionOptions contains all options for attaching to a session
@@ -230,6 +233,21 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	if resolved.ClaudeAuth != nil {
 		session.ClaudeAuth = resolved.ClaudeAuth
 	}
+	if resolved.DiffViewer != nil {
+		session.DiffViewer = resolved.DiffViewer
+	}
+
+	// Apply DiffViewer settings from CLI flags (highest priority)
+	if opts.DiffViewer {
+		if session.DiffViewer == nil {
+			session.DiffViewer = &config.DiffViewerConfig{}
+		}
+		session.DiffViewer.Enabled = true
+	}
+	if opts.DiffViewerPort > 0 && opts.DiffViewerPort <= math.MaxInt32 && session.DiffViewer != nil {
+		// #nosec G115 -- Port numbers are limited to 0-65535, well within int32 range
+		session.DiffViewer.Port = int32(opts.DiffViewerPort)
+	}
 
 	// Validate session
 	if validateErr := session.Validate(); validateErr != nil {
@@ -323,6 +341,15 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		TtydPort:     ttydPort,
 		TtydOptions:  ttydOptions,
 		TtydWritable: ttydWritable,
+	}
+
+	// Add DiffViewer sidecar if enabled
+	if session.DiffViewer != nil && session.DiffViewer.Enabled {
+		podSpec.DiffViewer = &kubernetes.DiffViewerSpec{
+			Enabled: true,
+			Image:   session.DiffViewer.Image,
+			Port:    session.DiffViewer.Port,
+		}
 	}
 
 	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {

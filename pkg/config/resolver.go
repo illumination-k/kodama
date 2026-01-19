@@ -28,6 +28,7 @@ type ResolvedConfig struct {
 	SyncUseGitignore *bool
 	SyncCustomDirs   []CustomDirSync
 	ClaudeAuth       *ClaudeAuthOverride
+	DiffViewer       *DiffViewerConfig
 
 	// Storage (from global only)
 	StorageWorkspace  string
@@ -96,6 +97,15 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 	resolved.SyncUseGitignore = r.global.Sync.UseGitignore
 	resolved.SyncCustomDirs = r.global.Sync.CustomDirs
 
+	// DiffViewer config from global
+	if r.global.DiffViewer.Enabled {
+		resolved.DiffViewer = &DiffViewerConfig{
+			Enabled: true,
+			Image:   r.global.DiffViewer.Image,
+			Port:    r.global.DiffViewer.Port,
+		}
+	}
+
 	// Layer 2: Apply template config (overrides global)
 	if r.template != nil {
 		// Apply string fields using coalesce
@@ -126,8 +136,9 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		// Apply ttyd options
 		resolved.TtydOptions = CoalesceString(r.template.Ttyd.Options, resolved.TtydOptions)
 
-		// Custom resources: merge with template overriding
+		// Custom resources: template completely replaces (not merges)
 		if r.template.Resources.CustomResources != nil {
+			resolved.CustomResources = make(map[string]string)
 			for k, v := range r.template.Resources.CustomResources {
 				resolved.CustomResources[k] = v
 			}
@@ -152,6 +163,11 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		// ClaudeAuth: template overrides if provided
 		if r.template.ClaudeAuth != nil {
 			resolved.ClaudeAuth = r.template.ClaudeAuth
+		}
+
+		// DiffViewer: template overrides if provided
+		if r.template.DiffViewer != nil {
+			resolved.DiffViewer = r.template.DiffViewer
 		}
 	}
 

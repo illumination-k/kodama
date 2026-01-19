@@ -47,6 +47,65 @@ func buildInitContainers(spec *PodSpec) []corev1.Container {
 	return containers
 }
 
+// DefaultDiffViewerImage is the default container image for the difit diff viewer
+const DefaultDiffViewerImage = "node:21-slim"
+
+// DefaultDiffViewerPort is the default port for the difit web server
+const DefaultDiffViewerPort int32 = 4966
+
+// createDiffViewerSidecarContainer creates the difit diff viewer sidecar container
+func createDiffViewerSidecarContainer(spec *DiffViewerSpec) *corev1.Container {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+
+	image := spec.Image
+	if image == "" {
+		image = DefaultDiffViewerImage
+	}
+
+	port := spec.Port
+	if port == 0 {
+		port = DefaultDiffViewerPort
+	}
+
+	return &corev1.Container{
+		Name:       "diff-viewer",
+		Image:      image,
+		WorkingDir: "/workspace",
+		Command:    []string{"/bin/sh", "-c"},
+		Args: []string{
+			`set -e
+echo "Installing difit diff viewer..."
+npm install -g difit
+
+echo "Starting difit server on port $DIFIT_PORT..."
+cd /workspace
+# Use </dev/null to prevent stdin issues, default to HEAD
+difit HEAD --port $DIFIT_PORT --host 0.0.0.0 </dev/null`,
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "DIFIT_PORT",
+				Value: fmt.Sprintf("%d", port),
+			},
+		},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "difit",
+				ContainerPort: port,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "workspace",
+				MountPath: "/workspace",
+			},
+		},
+	}
+}
+
 // CreatePod creates a new pod in the cluster
 func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 	// Build init containers using the new config-based approach
@@ -72,6 +131,22 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		containerCommand = []string{"/bin/bash", "-c", ttydCmd}
 	}
 
+	// Build main containers list
+	containers := []corev1.Container{
+		{
+			Name:       "claude-code",
+			Image:      spec.Image,
+			Command:    containerCommand,
+			WorkingDir: "/workspace",
+			Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit, spec.CustomResources),
+		},
+	}
+
+	// Add diff viewer sidecar if enabled
+	if diffViewerContainer := createDiffViewerSidecarContainer(spec.DiffViewer); diffViewerContainer != nil {
+		containers = append(containers, *diffViewerContainer)
+	}
+
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      spec.Name,
@@ -83,16 +158,8 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		},
 		Spec: corev1.PodSpec{
 			InitContainers: initContainers,
-			Containers: []corev1.Container{
-				{
-					Name:       "claude-code",
-					Image:      spec.Image,
-					Command:    containerCommand,
-					WorkingDir: "/workspace",
-					Resources:  c.buildResourceRequirements(spec.CPULimit, spec.MemoryLimit, spec.CustomResources),
-				},
-			},
-			RestartPolicy: corev1.RestartPolicyNever,
+			Containers:     containers,
+			RestartPolicy:  corev1.RestartPolicyNever,
 		},
 	}
 
