@@ -41,12 +41,14 @@ type InstallerConfig interface {
 The `Builder` takes installer configs and produces Kubernetes init containers:
 
 **Single installer:**
+
 ```go
 builder := initcontainer.NewBuilder()
 container := builder.Build(config)
 ```
 
 **Combined installers (recommended for efficiency):**
+
 ```go
 builder := initcontainer.NewBuilder()
 configs := []initcontainer.InstallerConfig{
@@ -57,6 +59,7 @@ container := builder.BuildCombined("tools-installer", configs...)
 ```
 
 `BuildCombined` merges multiple installers into a single init container, which is more efficient than creating separate containers. It automatically:
+
 - Combines scripts sequentially with proper logging
 - Deduplicates volume mounts and environment variables
 - Uses the first config's image and command

@@ -154,6 +154,7 @@ Pods use init containers for setup, built using a config-based architecture:
 2. **workspace-initializer**: Git clone with token injection and branch setup (if repo specified)
 
 The config-based design (`pkg/kubernetes/initcontainer/`) provides:
+
 - **BuildCombined**: Merges multiple installers into a single init container for efficiency
 - **InstallerConfig interface**: Add new tools by implementing this interface
 - **Independent testing**: Each installer config can be unit tested
