@@ -1,0 +1,28 @@
+# Example: Session template with dotenv support
+# Place this in your repository root as `.kodama.yaml`
+
+env:
+  # Load environment variables from these files
+  # Files are read from your local machine (not committed to git)
+  dotenvFiles:
+    - .env
+    - .env.local
+
+  # Exclude these variables from being injected
+  # (in addition to system defaults like PATH, HOME, etc.)
+  excludeVars:
+    - VERBOSE
+    - DEBUG_MODE
+
+# Resource configuration
+resources:
+  cpu: "2"
+  memory: "4Gi"
+
+# File sync configuration
+sync:
+  useGitignore: true
+  exclude:
+    - node_modules/
+    - .env          # Don't sync .env to pod (variables are injected instead)
+    - .env.local    # Don't sync local env files
