@@ -108,7 +108,7 @@ config := initcontainer.NewWorkspaceInitializerConfig(
     "https://github.com/example/repo.git",
     "feature-branch",
     opts,
-).WithGitSecret("github-token")
+)
 ```
 
 ## Adding a New Installer

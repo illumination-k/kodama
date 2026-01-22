@@ -17,7 +17,7 @@ func TestWorkspaceInitializerConfig(t *testing.T) {
 		"https://github.com/example/repo.git",
 		"feature-branch",
 		opts,
-	).WithGitSecret("github-token")
+	)
 
 	// Test basic properties
 	if config.Name() != "workspace-initializer" {
@@ -61,22 +61,10 @@ func TestWorkspaceInitializerConfig(t *testing.T) {
 		t.Errorf("Unexpected volume mount: %+v", mounts[0])
 	}
 
-	// Test env vars (should include GH_TOKEN from secret)
+	// Test env vars (should be empty - auth handled via envFrom)
 	envVars := config.EnvVars()
-	if len(envVars) != 1 {
-		t.Fatalf("Expected 1 env var, got %d", len(envVars))
-	}
-
-	if envVars[0].Name != "GH_TOKEN" {
-		t.Errorf("Expected env var 'GH_TOKEN', got '%s'", envVars[0].Name)
-	}
-
-	if envVars[0].ValueFrom == nil || envVars[0].ValueFrom.SecretKeyRef == nil {
-		t.Error("Expected env var to reference secret")
-	}
-
-	if envVars[0].ValueFrom.SecretKeyRef.Name != "github-token" {
-		t.Errorf("Expected secret name 'github-token', got '%s'", envVars[0].ValueFrom.SecretKeyRef.Name)
+	if len(envVars) != 0 {
+		t.Fatalf("Expected 0 env vars, got %d", len(envVars))
 	}
 }
 

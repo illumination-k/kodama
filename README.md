@@ -16,6 +16,7 @@ A kubectl plugin for managing Claude Code sessions in Kubernetes.
 - [Advanced Usage](#advanced-usage)
   - [Git Authentication](#git-authentication)
   - [File Synchronization](#file-synchronization)
+  - [Environment Variables](#environment-variables)
   - [Custom Editor Configuration](#custom-editor-configuration)
   - [Coding Agent Integration](#coding-agent-integration)
   - [Resource Management](#resource-management)
@@ -125,9 +126,6 @@ defaults:
     workspace: "10Gi"
     claudeHome: "1Gi"
   branchPrefix: "kodama/"
-
-git:
-  secretName: git-ssh-key  # Optional: K8s secret for git authentication
 ```
 
 ### Session Configuration Example
@@ -342,18 +340,40 @@ kubectl kodama delete experiment -n testing --force
 
 ### Git Authentication
 
-**GitHub Token (for private repos):**
+**Recommended: Use dotenv files (unified with Claude auth):**
 
-Set the `GITHUB_TOKEN` environment variable before starting:
+Add your GitHub token to `.env` file:
+
+```bash
+# .env file
+GITHUB_TOKEN=ghp_your_token_here
+```
+
+Configure in `.kodama.yaml`:
+
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+```
+
+Start session (automatically uses GitHub token from .env):
+
+```bash
+kubectl kodama start private-work --repo https://github.com/myorg/private-repo --sync .
+```
+
+**Alternative: Environment variable:**
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
 kubectl kodama start private-work --repo https://github.com/myorg/private-repo
 ```
 
-**SSH Keys:**
+**Alternative: SSH Keys (for SSH-based git):**
 
-For SSH-based git operations, configure a Kubernetes secret:
+Configure a Kubernetes secret:
 
 ```yaml
 # In ~/.kodama/config.yaml
@@ -367,6 +387,8 @@ Create the secret:
 kubectl create secret generic git-ssh-key \
   --from-file=ssh-privatekey=$HOME/.ssh/id_rsa
 ```
+
+See `examples/unified-credentials/` for complete unified authentication setup.
 
 ### File Synchronization
 
@@ -401,6 +423,102 @@ By default, Kodama respects `.gitignore` patterns. Disable in config:
 sync:
   useGitignore: false
 ```
+
+### Environment Variables
+
+**Load environment variables from dotenv files:**
+
+Kodama supports loading environment variables from `.env` files and injecting them into your session pod. This is useful for development secrets, API keys, and configuration values.
+
+```bash
+# Load from a single .env file
+kubectl kodama start my-session --env-file .env --sync .
+
+# Load from multiple files (last file wins for duplicate variables)
+kubectl kodama start my-session \
+  --env-file .env \
+  --env-file .env.local \
+  --sync .
+```
+
+**Security features:**
+
+- System-critical variables (PATH, HOME, etc.) are automatically excluded
+- Kubernetes service variables are never overridden
+- Claude authentication variables are protected
+- Warning displayed when loading .env files
+
+**Exclude specific variables:**
+
+```bash
+# Exclude specific variables from injection
+kubectl kodama start my-session \
+  --env-file .env \
+  --env-exclude VERBOSE \
+  --env-exclude DEBUG_MODE \
+  --sync .
+```
+
+**Template configuration:**
+
+Add to `.kodama.yaml` in your repository:
+
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+  excludeVars:
+    - CUSTOM_VAR_TO_EXCLUDE
+```
+
+**Global configuration:**
+
+Add to `~/.kodama/config.yaml`:
+
+```yaml
+defaults:
+  env:
+    excludeVars:
+      - SYSTEM_SPECIFIC_VAR
+```
+
+**Important notes:**
+
+- Dotenv files are read from your **local machine** (not from git)
+- Keep .env files out of version control (add to .gitignore)
+- Variable names must match `^[A-Z_][A-Z0-9_]*$` pattern
+- Total environment data must not exceed 1MB (Kubernetes limit)
+- Environment secrets are automatically cleaned up when session is deleted
+
+**Unified Credentials Management:**
+
+Use dotenv files to manage **all credentials** (GitHub PAT, Claude Code auth, cloud credentials) in one place:
+
+```bash
+# .env file
+GITHUB_TOKEN=ghp_your_github_token
+CLAUDE_CODE_AUTH_TOKEN=sk-ant-your_claude_token
+AWS_ACCESS_KEY_ID=your_aws_key
+DATABASE_URL=postgresql://...
+```
+
+Configure in `.kodama.yaml`:
+
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+```
+
+Start session (all credentials automatically available):
+
+```bash
+kubectl kodama start dev --repo https://github.com/myorg/private-repo --sync .
+```
+
+Both git operations and Claude Code authentication work automatically! See `examples/unified-credentials/` for complete setup guide.
 
 ### Custom Editor Configuration
 
@@ -789,9 +907,6 @@ defaults:
     claudeHome: "2Gi"
 
   branchPrefix: "kodama/"
-
-git:
-  secretName: git-ssh-key  # Optional: K8s secret for git authentication
 
 sync:
   useGitignore: true       # Respect .gitignore patterns (default: true)

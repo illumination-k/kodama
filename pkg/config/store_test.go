@@ -168,9 +168,6 @@ func TestStore_SaveAndLoadGlobalConfig(t *testing.T) {
 			},
 			BranchPrefix: "feature/",
 		},
-		Git: GitConfig{
-			SecretName: "my-secret",
-		},
 	}
 
 	// Save config
@@ -185,7 +182,6 @@ func TestStore_SaveAndLoadGlobalConfig(t *testing.T) {
 	assert.Equal(t, "custom-image:latest", loaded.Defaults.Image)
 	assert.Equal(t, "2", loaded.Defaults.Resources.CPU)
 	assert.Equal(t, "4Gi", loaded.Defaults.Resources.Memory)
-	assert.Equal(t, "my-secret", loaded.Git.SecretName)
 }
 
 func TestStore_SessionExists(t *testing.T) {
@@ -301,7 +297,6 @@ sync:
 				assert.Equal(t, "python:3.11", config.Image)
 				assert.Equal(t, "https://github.com/test/repo", config.Repo)
 				assert.Equal(t, "develop", config.Branch)
-				assert.Equal(t, "test-secret", config.GitSecret)
 				assert.Equal(t, 1, config.GitClone.Depth)
 				assert.True(t, config.GitClone.SingleBranch)
 				assert.Equal(t, "--recurse-submodules", config.GitClone.ExtraArgs)

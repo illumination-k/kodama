@@ -2,7 +2,6 @@ package initcontainer
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 
 	"github.com/illumination-k/kodama/pkg/gitcmd"
 )
@@ -19,9 +18,6 @@ type WorkspaceInitializerConfig struct {
 	CloneDepth   int
 	SingleBranch bool
 	ExtraArgs    string
-
-	// Git secret for authentication
-	GitSecretName string
 
 	// WorkspaceVolumeName is the name of the volume to mount at /workspace
 	WorkspaceVolumeName string
@@ -42,12 +38,6 @@ func NewWorkspaceInitializerConfig(gitRepo, gitBranch string, opts *gitcmd.Clone
 	}
 
 	return config
-}
-
-// WithGitSecret sets the git secret name for authentication
-func (w *WorkspaceInitializerConfig) WithGitSecret(secretName string) *WorkspaceInitializerConfig {
-	w.GitSecretName = secretName
-	return w
 }
 
 // WithWorkspaceVolume sets the workspace volume name
@@ -98,26 +88,9 @@ func (w *WorkspaceInitializerConfig) VolumeMounts() []corev1.VolumeMount {
 	}
 }
 
-// EnvVars returns environment variables for git authentication
+// EnvVars returns environment variables (empty - auth is handled via envFrom)
 func (w *WorkspaceInitializerConfig) EnvVars() []corev1.EnvVar {
-	if w.GitSecretName == "" {
-		return []corev1.EnvVar{}
-	}
-
-	return []corev1.EnvVar{
-		{
-			Name: "GH_TOKEN",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: w.GitSecretName,
-					},
-					Key:      "token",
-					Optional: ptr.To(true),
-				},
-			},
-		},
-	}
+	return []corev1.EnvVar{}
 }
 
 // StartMessage returns the initialization start message

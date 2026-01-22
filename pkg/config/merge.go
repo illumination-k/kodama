@@ -45,3 +45,12 @@ func CoalesceMap(cliMap, resolvedMap map[string]string) map[string]string {
 
 	return result
 }
+
+// CoalesceStringSlice returns cliSlice if non-empty, otherwise resolvedSlice
+// This is useful for merging CLI flags with resolved config values
+func CoalesceStringSlice(cliSlice, resolvedSlice []string) []string {
+	if len(cliSlice) > 0 {
+		return cliSlice
+	}
+	return resolvedSlice
+}

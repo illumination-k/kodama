@@ -24,7 +24,6 @@ func NewDevCommand() *cobra.Command {
 		promptFile      string
 		image           string
 		command         string
-		gitSecret       string
 		cloneDepth      int
 		singleBranch    bool
 		gitCloneArgs    string
@@ -88,7 +87,6 @@ Examples:
 				PromptFile:      promptFile,
 				Image:           image,
 				Command:         command,
-				GitSecret:       gitSecret,
 				CloneDepth:      cloneDepth,
 				SingleBranch:    singleBranch,
 				GitCloneArgs:    gitCloneArgs,
@@ -141,7 +139,6 @@ Examples:
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
 	cmd.Flags().StringVar(&command, "cmd", "", "Pod command override (space-separated, e.g., 'sh -c echo hello')")
-	cmd.Flags().StringVar(&gitSecret, "git-secret", "", "Kubernetes secret name for git credentials (overrides global default)")
 	cmd.Flags().IntVar(&cloneDepth, "clone-depth", 0, "Create a shallow clone with specified depth (0 = full clone)")
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
 	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")

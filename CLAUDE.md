@@ -87,7 +87,20 @@ Multi-tier configuration system:
 
 - **Store**: Manages YAML session configs in `~/.kodama/sessions/`
 - **Priority**: CLI flags > template config (`.kodama.yaml`) > global config > defaults
-- Session state tracks pod, PVCs, sync status, agent history
+- Session state tracks pod, PVCs, sync status, agent history, environment config
+
+#### `pkg/env/`
+
+Dotenv file loading and environment variable injection:
+
+- **LoadDotenvFiles**: Parses dotenv files with last-wins precedence for duplicate variables
+- **ApplyExclusions**: Filters out system-critical and user-specified variables
+- **ValidateVarName**: Ensures variable names match `^[A-Z_][A-Z0-9_]*$` pattern
+- **ValidateSecretSize**: Checks that environment data doesn't exceed 1MB K8s secret limit
+- **DefaultExcludedVars**: System variables that should never be overridden (PATH, HOME, K8s vars, Claude auth)
+- Files are read from local machine (where `kubectl kodama` runs), not from git repo
+- Creates K8s secrets with environment variables and injects via `envFrom`
+- Secrets are automatically cleaned up on session deletion
 
 #### `pkg/kubernetes/`
 
@@ -95,7 +108,7 @@ Kubernetes abstraction layer:
 
 - Pod creation with multi-init-container strategy
 - Status monitoring via pod watch API
-- Three auth injection methods: token secret, file-based, environment variables
+- Environment variable injection via `envFrom` with K8s secrets
 - Port forwarding for ttyd web terminal
 - Command execution wrapper (kubectl exec)
 
@@ -212,13 +225,10 @@ Sessions track:
 
 ### Git Authentication
 
-Three methods supported:
+Git authentication is handled via environment variables from .env files:
 
-1. **Token in environment**: `GITHUB_TOKEN` injected into init container
-2. **Token via K8s secret**: Referenced in global config
-3. **SSH keys**: Mounted from K8s secret
-
-Tokens are automatically injected into HTTPS URLs during git clone.
+- `GITHUB_TOKEN` or `GH_TOKEN` - Automatically injected into HTTPS URLs during git clone
+- Tokens are loaded from .env files and made available to init containers via K8s secrets
 
 ### File Sync Exclusions
 
@@ -243,7 +253,8 @@ Ttyd mode uses kubectl port-forward with automatic port allocation (default 7681
 Tests exist for key packages:
 
 - `pkg/config`: Configuration loading and merging
-- `pkg/kubernetes`: Pod spec generation
+- `pkg/env`: Dotenv parsing, validation, and exclusions
+- `pkg/kubernetes`: Pod spec generation and secret management
 - `pkg/gitcmd`: Git script generation and validation
 - `pkg/sync/exclude`: Pattern matching logic
 
@@ -265,21 +276,30 @@ defaults:
     claudeHome: "1Gi"
   branchPrefix: "kodama/"
 
-git:
-  secretName: git-ssh-key  # Optional K8s secret
-
 sync:
   useGitignore: true
   excludePatterns: ["*.log", "tmp/"]
+
+env:
+  excludeVars: []  # Additional vars to exclude beyond defaults
 ```
 
 ### Session Template (`.kodama.yaml` in repo root)
 
 Per-repository defaults that override global config. Used when starting sessions in that repo.
 
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+  excludeVars:
+    - VERBOSE  # Example: don't inject this var
+```
+
 ### Session State (`~/.kodama/sessions/<name>.yaml`)
 
-Tracks complete session state including pod, PVCs, git info, sync status, agent history.
+Tracks complete session state including pod, PVCs, git info, sync status, agent history, and environment secret info (secret name, creation status).
 
 ## Dependencies
 

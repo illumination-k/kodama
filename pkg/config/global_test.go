@@ -36,9 +36,6 @@ func TestGlobalConfig_Merge(t *testing.T) {
 			},
 			BranchPrefix: "feature/",
 		},
-		Git: GitConfig{
-			SecretName: "my-git-secret",
-		},
 	}
 
 	base.Merge(override)
@@ -50,7 +47,6 @@ func TestGlobalConfig_Merge(t *testing.T) {
 	assert.Equal(t, "50Gi", base.Defaults.Storage.Workspace)
 	assert.Equal(t, "5Gi", base.Defaults.Storage.ClaudeHome)
 	assert.Equal(t, "feature/", base.Defaults.BranchPrefix)
-	assert.Equal(t, "my-git-secret", base.Git.SecretName)
 }
 
 func TestGlobalConfig_MergePartial(t *testing.T) {

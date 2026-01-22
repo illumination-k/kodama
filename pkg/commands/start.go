@@ -24,7 +24,6 @@ func NewStartCommand() *cobra.Command {
 		promptFile      string
 		image           string
 		command         string
-		gitSecret       string
 		cloneDepth      int
 		singleBranch    bool
 		gitCloneArgs    string
@@ -33,6 +32,8 @@ func NewStartCommand() *cobra.Command {
 		ttydPort        int
 		ttydOptions     string
 		ttydReadonly    bool
+		envFiles        []string
+		envExclude      []string
 	)
 
 	cmd := &cobra.Command{
@@ -79,7 +80,6 @@ Examples:
 				PromptFile:      promptFile,
 				Image:           image,
 				Command:         command,
-				GitSecret:       gitSecret,
 				CloneDepth:      cloneDepth,
 				SingleBranch:    singleBranch,
 				GitCloneArgs:    gitCloneArgs,
@@ -90,6 +90,8 @@ Examples:
 				TtydOptions:     ttydOptions,
 				TtydReadonly:    ttydReadonly,
 				TtydReadonlySet: cmd.Flags().Changed("ttyd-readonly"),
+				EnvFiles:        envFiles,
+				EnvExclude:      envExclude,
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -137,7 +139,6 @@ Examples:
 	cmd.Flags().StringVar(&promptFile, "prompt-file", "", "File containing prompt for coding agent")
 	cmd.Flags().StringVar(&image, "image", "", "Container image to use (overrides global default)")
 	cmd.Flags().StringVar(&command, "cmd", "", "Pod command override (space-separated, e.g., 'sh -c echo hello')")
-	cmd.Flags().StringVar(&gitSecret, "git-secret", "", "Kubernetes secret name for git credentials (overrides global default)")
 	cmd.Flags().IntVar(&cloneDepth, "clone-depth", 0, "Create a shallow clone with specified depth (0 = full clone)")
 	cmd.Flags().BoolVar(&singleBranch, "single-branch", false, "Clone only the specified branch (or default branch)")
 	cmd.Flags().StringVar(&gitCloneArgs, "git-clone-args", "", "Additional arguments to pass to git clone (advanced)")
@@ -146,6 +147,8 @@ Examples:
 	cmd.Flags().IntVar(&ttydPort, "ttyd-port", 0, "Ttyd port (default: 7681)")
 	cmd.Flags().StringVar(&ttydOptions, "ttyd-options", "", "Additional ttyd options")
 	cmd.Flags().BoolVar(&ttydReadonly, "ttyd-readonly", false, "Enable read-only mode for ttyd (disables terminal input)")
+	cmd.Flags().StringSliceVar(&envFiles, "env-file", []string{}, "Dotenv file(s) to load (can be specified multiple times)")
+	cmd.Flags().StringSliceVar(&envExclude, "env-exclude", []string{}, "Environment variable names to exclude from injection (can be specified multiple times)")
 
 	return cmd
 }

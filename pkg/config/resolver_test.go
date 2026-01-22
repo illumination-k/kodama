@@ -63,9 +63,6 @@ func TestConfigResolver_Resolve_GlobalWithCustomValues(t *testing.T) {
 			},
 			BranchPrefix: "custom/",
 		},
-		Git: GitConfig{
-			SecretName: "my-git-secret",
-		},
 		Sync: GlobalSyncConfig{
 			Exclude: []string{"*.log", "tmp/"},
 		},
@@ -88,9 +85,6 @@ func TestConfigResolver_Resolve_GlobalWithCustomValues(t *testing.T) {
 	}
 	if resolved.CustomResources["nvidia.com/gpu"] != "1" {
 		t.Errorf("expected GPU '1', got '%s'", resolved.CustomResources["nvidia.com/gpu"])
-	}
-	if resolved.GitSecret != "my-git-secret" {
-		t.Errorf("expected git secret 'my-git-secret', got '%s'", resolved.GitSecret)
 	}
 	if resolved.BranchPrefix != "custom/" {
 		t.Errorf("expected branch prefix 'custom/', got '%s'", resolved.BranchPrefix)
@@ -348,33 +342,6 @@ func TestConfigResolver_Resolve_SyncConfig(t *testing.T) {
 	}
 	if resolved.SyncCustomDirs[0].Source != "~/.ssh" {
 		t.Errorf("expected custom dir source '~/.ssh', got '%s'", resolved.SyncCustomDirs[0].Source)
-	}
-}
-
-func TestConfigResolver_Resolve_ClaudeAuthConfig(t *testing.T) {
-	// Test Claude auth configuration
-	template := &SessionConfig{
-		ClaudeAuth: &ClaudeAuthOverride{
-			AuthType:   "token",
-			SecretName: "my-claude-secret",
-			Profile:    "production",
-		},
-	}
-
-	resolver := NewConfigResolver(DefaultGlobalConfig(), template)
-	resolved := resolver.Resolve()
-
-	if resolved.ClaudeAuth == nil {
-		t.Fatal("expected ClaudeAuth to be set")
-	}
-	if resolved.ClaudeAuth.AuthType != "token" {
-		t.Errorf("expected auth type 'token', got '%s'", resolved.ClaudeAuth.AuthType)
-	}
-	if resolved.ClaudeAuth.SecretName != "my-claude-secret" {
-		t.Errorf("expected secret name 'my-claude-secret', got '%s'", resolved.ClaudeAuth.SecretName)
-	}
-	if resolved.ClaudeAuth.Profile != "production" {
-		t.Errorf("expected profile 'production', got '%s'", resolved.ClaudeAuth.Profile)
 	}
 }
 
