@@ -34,7 +34,6 @@ type StartSessionOptions struct {
 	PromptFile      string
 	Image           string
 	Command         string
-	GitSecret       string
 	CloneDepth      int
 	SingleBranch    bool
 	GitCloneArgs    string
@@ -126,7 +125,6 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	memory := config.CoalesceString(opts.Memory, resolved.Memory)
 	customResources := config.CoalesceMap(opts.CustomResources, resolved.CustomResources)
 	image := config.CoalesceString(opts.Image, resolved.Image)
-	gitSecret := config.CoalesceString(opts.GitSecret, resolved.GitSecret)
 	branch := config.CoalesceString(opts.Branch, resolved.Branch)
 	cloneDepth := config.CoalesceInt(opts.CloneDepth, resolved.CloneDepth)
 	singleBranch := config.CoalesceBool(opts.SingleBranch, resolved.SingleBranch, opts.SingleBranch)
@@ -197,7 +195,6 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		PodName:   fmt.Sprintf("kodama-%s", opts.Name),
 		Image:     image,
 		Command:   cmdSlice,
-		GitSecret: gitSecret,
 		GitClone: config.GitCloneConfig{
 			Depth:        cloneDepth,
 			SingleBranch: singleBranch,
@@ -233,9 +230,6 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	}
 	if len(resolved.SyncCustomDirs) > 0 {
 		session.Sync.CustomDirs = resolved.SyncCustomDirs
-	}
-	if resolved.ClaudeAuth != nil {
-		session.ClaudeAuth = resolved.ClaudeAuth
 	}
 
 	// Apply env config (CLI > template > global)
@@ -352,9 +346,6 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		return nil, fmt.Errorf("container image is required. Specify via --image flag or set default in ~/.kodama/config.yaml")
 	}
 
-	// Use git secret from session config (already resolved from CLI > template > global)
-	effectiveGitSecret := session.GitSecret
-
 	// Determine branch name for init container (if repo mode)
 	effectiveBranch := branch
 	if repo != "" && effectiveBranch == "" {
@@ -375,7 +366,6 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		CPULimit:        cpu,
 		MemoryLimit:     memory,
 		CustomResources: customResources,
-		GitSecretName:   effectiveGitSecret,
 		Command:         effectiveCommand,
 
 		// Environment variables secret

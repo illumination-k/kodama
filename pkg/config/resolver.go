@@ -9,7 +9,6 @@ type ResolvedConfig struct {
 	CPU             string
 	Memory          string
 	CustomResources map[string]string
-	GitSecret       string
 	Branch          string
 	CloneDepth      int
 	SingleBranch    bool
@@ -27,7 +26,6 @@ type ResolvedConfig struct {
 	SyncExclude      []string
 	SyncUseGitignore *bool
 	SyncCustomDirs   []CustomDirSync
-	ClaudeAuth       *ClaudeAuthOverride
 
 	// Storage (from global only)
 	StorageWorkspace  string
@@ -67,7 +65,6 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 	resolved.Image = r.global.Defaults.Image
 	resolved.CPU = r.global.Defaults.Resources.CPU
 	resolved.Memory = r.global.Defaults.Resources.Memory
-	resolved.GitSecret = r.global.Git.SecretName
 
 	// Merge custom resources from global config
 	if r.global.Defaults.Resources.CustomResources != nil {
@@ -111,7 +108,6 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		resolved.Image = CoalesceString(r.template.Image, resolved.Image)
 		resolved.CPU = CoalesceString(r.template.Resources.CPU, resolved.CPU)
 		resolved.Memory = CoalesceString(r.template.Resources.Memory, resolved.Memory)
-		resolved.GitSecret = CoalesceString(r.template.GitSecret, resolved.GitSecret)
 		resolved.Branch = CoalesceString(r.template.Branch, resolved.Branch)
 		resolved.GitCloneArgs = CoalesceString(r.template.GitClone.ExtraArgs, resolved.GitCloneArgs)
 		resolved.Repo = CoalesceString(r.template.Repo, resolved.Repo)
@@ -134,8 +130,9 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		// Apply ttyd options
 		resolved.TtydOptions = CoalesceString(r.template.Ttyd.Options, resolved.TtydOptions)
 
-		// Custom resources: merge with template overriding
+		// Custom resources: template completely replaces global (not merged)
 		if r.template.Resources.CustomResources != nil {
+			resolved.CustomResources = make(map[string]string)
 			for k, v := range r.template.Resources.CustomResources {
 				resolved.CustomResources[k] = v
 			}
@@ -155,11 +152,6 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		}
 		if len(r.template.Sync.CustomDirs) > 0 {
 			resolved.SyncCustomDirs = r.template.Sync.CustomDirs
-		}
-
-		// ClaudeAuth: template overrides if provided
-		if r.template.ClaudeAuth != nil {
-			resolved.ClaudeAuth = r.template.ClaudeAuth
 		}
 
 		// Env config: template dotenv files override, exclusions append

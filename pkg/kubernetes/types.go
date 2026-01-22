@@ -27,15 +27,7 @@ type PodSpec struct {
 	CPULimit        string
 	MemoryLimit     string
 	CustomResources map[string]string // e.g., "nvidia.com/gpu": "1"
-	GitSecretName   string
 	Command         []string
-
-	// Claude authentication
-	ClaudeAuthType   string            // "token", "file"
-	ClaudeSecretName string            // K8s secret for token
-	ClaudeSecretKey  string            // Key in secret (default: "token")
-	ClaudeAuthFile   string            // Path to auth file (for file auth)
-	ClaudeEnvVars    map[string]string // Additional env vars for auth
 
 	// Environment variables from dotenv files
 	EnvSecretName string // K8s secret containing dotenv variables
