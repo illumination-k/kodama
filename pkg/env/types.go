@@ -8,10 +8,10 @@ type EnvConfig struct {
 	SecretCreated bool     `yaml:"secretCreated,omitempty"`
 }
 
-// DefaultExcludedVars contains variables that should never be overridden
-// to prevent breaking the pod environment or exposing security risks
+// DefaultExcludedVars contains system-critical variables that should never be overridden
+// These variables are essential for pod operation and are always excluded
 var DefaultExcludedVars = []string{
-	// System variables
+	// System variables (critical for shell and process operation)
 	"PATH",
 	"HOME",
 	"USER",
@@ -22,7 +22,7 @@ var DefaultExcludedVars = []string{
 	"HOSTNAME",
 	"LOGNAME",
 
-	// Kubernetes variables
+	// Kubernetes variables (injected by K8s, should never be overridden)
 	"KUBERNETES_SERVICE_HOST",
 	"KUBERNETES_SERVICE_PORT",
 	"KUBERNETES_SERVICE_PORT_HTTPS",
@@ -31,9 +31,4 @@ var DefaultExcludedVars = []string{
 	"KUBERNETES_PORT_443_TCP_PROTO",
 	"KUBERNETES_PORT_443_TCP_PORT",
 	"KUBERNETES_PORT_443_TCP_ADDR",
-
-	// Claude Code variables
-	"CLAUDE_CODE_AUTH_TOKEN",
-	"CLAUDE_AUTH_FILE",
-	"ANTHROPIC_API_KEY",
 }

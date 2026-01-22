@@ -304,9 +304,10 @@ func TestIsSystemVar(t *testing.T) {
 		{"PATH", true},
 		{"HOME", true},
 		{"KUBERNETES_SERVICE_HOST", true},
-		{"CLAUDE_CODE_AUTH_TOKEN", true},
 		{"MY_CUSTOM_VAR", false},
 		{"DATABASE_URL", false},
+		{"GITHUB_TOKEN", false},           // Not a system var - allowed in .env
+		{"CLAUDE_CODE_AUTH_TOKEN", false}, // Not a system var - allowed in .env
 	}
 
 	for _, tt := range tests {

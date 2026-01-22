@@ -343,18 +343,40 @@ kubectl kodama delete experiment -n testing --force
 
 ### Git Authentication
 
-**GitHub Token (for private repos):**
+**Recommended: Use dotenv files (unified with Claude auth):**
 
-Set the `GITHUB_TOKEN` environment variable before starting:
+Add your GitHub token to `.env` file:
+
+```bash
+# .env file
+GITHUB_TOKEN=ghp_your_token_here
+```
+
+Configure in `.kodama.yaml`:
+
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+```
+
+Start session (automatically uses GitHub token from .env):
+
+```bash
+kubectl kodama start private-work --repo https://github.com/myorg/private-repo --sync .
+```
+
+**Alternative: Environment variable:**
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
 kubectl kodama start private-work --repo https://github.com/myorg/private-repo
 ```
 
-**SSH Keys:**
+**Alternative: SSH Keys (for SSH-based git):**
 
-For SSH-based git operations, configure a Kubernetes secret:
+Configure a Kubernetes secret:
 
 ```yaml
 # In ~/.kodama/config.yaml
@@ -368,6 +390,8 @@ Create the secret:
 kubectl create secret generic git-ssh-key \
   --from-file=ssh-privatekey=$HOME/.ssh/id_rsa
 ```
+
+See `examples/unified-credentials/` for complete unified authentication setup.
 
 ### File Synchronization
 
@@ -469,6 +493,35 @@ defaults:
 - Variable names must match `^[A-Z_][A-Z0-9_]*$` pattern
 - Total environment data must not exceed 1MB (Kubernetes limit)
 - Environment secrets are automatically cleaned up when session is deleted
+
+**Unified Credentials Management:**
+
+Use dotenv files to manage **all credentials** (GitHub PAT, Claude Code auth, cloud credentials) in one place:
+
+```bash
+# .env file
+GITHUB_TOKEN=ghp_your_github_token
+CLAUDE_CODE_AUTH_TOKEN=sk-ant-your_claude_token
+AWS_ACCESS_KEY_ID=your_aws_key
+DATABASE_URL=postgresql://...
+```
+
+Configure in `.kodama.yaml`:
+
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+```
+
+Start session (all credentials automatically available):
+
+```bash
+kubectl kodama start dev --repo https://github.com/myorg/private-repo --sync .
+```
+
+Both git operations and Claude Code authentication work automatically! See `examples/unified-credentials/` for complete setup guide.
 
 ### Custom Editor Configuration
 
