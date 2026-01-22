@@ -126,9 +126,6 @@ defaults:
     workspace: "10Gi"
     claudeHome: "1Gi"
   branchPrefix: "kodama/"
-
-git:
-  secretName: git-ssh-key  # Optional: K8s secret for git authentication
 ```
 
 ### Session Configuration Example
@@ -910,9 +907,6 @@ defaults:
     claudeHome: "2Gi"
 
   branchPrefix: "kodama/"
-
-git:
-  secretName: git-ssh-key  # Optional: K8s secret for git authentication
 
 sync:
   useGitignore: true       # Respect .gitignore patterns (default: true)

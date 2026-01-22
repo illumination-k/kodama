@@ -4,32 +4,10 @@
 
 Kodamaは、GitHub PAT、Claude Code認証、クラウドプロバイダーの認証情報など、**すべての認証情報を.envファイルで統一管理**できます。
 
-## 従来の方法 vs 統一アプローチ
-
-### 従来の方法（複雑）
+## 基本的なアプローチ
 
 ```bash
-# GitHub認証: Kubernetes Secret
-kubectl create secret generic git-secret --from-literal=token=ghp_xxx
-
-# Claude認証: 別のKubernetes Secret
-kubectl create secret generic claude-token --from-literal=token=sk-ant-xxx
-
-# 設定ファイルで参照
-cat > ~/.kodama/config.yaml <<EOF
-git:
-  secretName: git-secret
-claude:
-  authType: token
-  token:
-    secretName: claude-token
-EOF
-```
-
-### 統一アプローチ（シンプル）
-
-```bash
-# すべて.envファイルに記載
+# すべての認証情報を.envファイルに記載
 cat > .env <<EOF
 GITHUB_TOKEN=ghp_xxx
 CLAUDE_CODE_AUTH_TOKEN=sk-ant-xxx
