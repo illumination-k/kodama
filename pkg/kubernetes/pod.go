@@ -143,6 +143,19 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		c.injectClaudeAuth(pod, spec)
 	}
 
+	// Inject environment variables from dotenv secret if specified
+	if spec.EnvSecretName != "" {
+		pod.Spec.Containers[0].EnvFrom = append(pod.Spec.Containers[0].EnvFrom,
+			corev1.EnvFromSource{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: spec.EnvSecretName,
+					},
+				},
+			},
+		)
+	}
+
 	// Build volumes and volume mounts
 	volumes := []corev1.Volume{
 		// Kodama bin volume - for Claude Code and kodama-specific tools

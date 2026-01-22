@@ -16,6 +16,7 @@ A kubectl plugin for managing Claude Code sessions in Kubernetes.
 - [Advanced Usage](#advanced-usage)
   - [Git Authentication](#git-authentication)
   - [File Synchronization](#file-synchronization)
+  - [Environment Variables](#environment-variables)
   - [Custom Editor Configuration](#custom-editor-configuration)
   - [Coding Agent Integration](#coding-agent-integration)
   - [Resource Management](#resource-management)
@@ -401,6 +402,73 @@ By default, Kodama respects `.gitignore` patterns. Disable in config:
 sync:
   useGitignore: false
 ```
+
+### Environment Variables
+
+**Load environment variables from dotenv files:**
+
+Kodama supports loading environment variables from `.env` files and injecting them into your session pod. This is useful for development secrets, API keys, and configuration values.
+
+```bash
+# Load from a single .env file
+kubectl kodama start my-session --env-file .env --sync .
+
+# Load from multiple files (last file wins for duplicate variables)
+kubectl kodama start my-session \
+  --env-file .env \
+  --env-file .env.local \
+  --sync .
+```
+
+**Security features:**
+
+- System-critical variables (PATH, HOME, etc.) are automatically excluded
+- Kubernetes service variables are never overridden
+- Claude authentication variables are protected
+- Warning displayed when loading .env files
+
+**Exclude specific variables:**
+
+```bash
+# Exclude specific variables from injection
+kubectl kodama start my-session \
+  --env-file .env \
+  --env-exclude VERBOSE \
+  --env-exclude DEBUG_MODE \
+  --sync .
+```
+
+**Template configuration:**
+
+Add to `.kodama.yaml` in your repository:
+
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+  excludeVars:
+    - CUSTOM_VAR_TO_EXCLUDE
+```
+
+**Global configuration:**
+
+Add to `~/.kodama/config.yaml`:
+
+```yaml
+defaults:
+  env:
+    excludeVars:
+      - SYSTEM_SPECIFIC_VAR
+```
+
+**Important notes:**
+
+- Dotenv files are read from your **local machine** (not from git)
+- Keep .env files out of version control (add to .gitignore)
+- Variable names must match `^[A-Z_][A-Z0-9_]*$` pattern
+- Total environment data must not exceed 1MB (Kubernetes limit)
+- Environment secrets are automatically cleaned up when session is deleted
 
 ### Custom Editor Configuration
 

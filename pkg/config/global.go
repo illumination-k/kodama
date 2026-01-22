@@ -1,5 +1,9 @@
 package config
 
+import (
+	"github.com/illumination-k/kodama/pkg/env"
+)
+
 // GlobalConfig represents global configuration for Kodama
 type GlobalConfig struct {
 	Defaults DefaultsConfig   `yaml:"defaults"`
@@ -16,6 +20,7 @@ type DefaultsConfig struct {
 	Storage      StorageConfig  `yaml:"storage"`
 	Ttyd         TtydConfig     `yaml:"ttyd"`
 	BranchPrefix string         `yaml:"branchPrefix"`
+	Env          env.EnvConfig  `yaml:"env,omitempty"`
 }
 
 // StorageConfig holds default storage sizes
@@ -148,5 +153,13 @@ func (g *GlobalConfig) Merge(other *GlobalConfig) {
 	}
 	if len(other.Sync.CustomDirs) > 0 {
 		g.Sync.CustomDirs = other.Sync.CustomDirs
+	}
+	// Merge env config
+	if len(other.Defaults.Env.DotenvFiles) > 0 {
+		g.Defaults.Env.DotenvFiles = other.Defaults.Env.DotenvFiles
+	}
+	if len(other.Defaults.Env.ExcludeVars) > 0 {
+		// Append to existing exclusions rather than replacing
+		g.Defaults.Env.ExcludeVars = append(g.Defaults.Env.ExcludeVars, other.Defaults.Env.ExcludeVars...)
 	}
 }

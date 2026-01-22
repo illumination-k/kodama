@@ -97,12 +97,23 @@ func runDelete(name string, keepConfig, force bool, kubeconfigPath string) error
 		}
 	}
 
-	// 4. Delete pod
-	fmt.Println("⏳ Deleting pod...")
+	// 4. Create Kubernetes client
 	k8sClient, err := kubernetes.NewClient(kubeconfigPath)
 	if err != nil {
 		fmt.Printf("⚠️  Warning: Failed to create kubernetes client: %v\n", err)
 	} else {
+		// 4a. Delete environment secret if exists
+		if session.Env.SecretCreated && session.Env.SecretName != "" {
+			fmt.Println("🗑️  Deleting environment secret...")
+			if err := k8sClient.DeleteSecret(ctx, session.Env.SecretName, session.Namespace); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to delete secret: %v\n", err)
+			} else {
+				fmt.Println("✓ Secret deleted")
+			}
+		}
+
+		// 4b. Delete pod
+		fmt.Println("⏳ Deleting pod...")
 		if err := k8sClient.DeletePod(ctx, session.PodName, session.Namespace); err != nil {
 			fmt.Printf("⚠️  Warning: Failed to delete pod: %v\n", err)
 		} else {

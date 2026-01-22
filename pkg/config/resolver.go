@@ -33,6 +33,10 @@ type ResolvedConfig struct {
 	StorageWorkspace  string
 	StorageClaudeHome string
 	BranchPrefix      string
+
+	// Env config (merged from template and global)
+	EnvDotenvFiles []string
+	EnvExcludeVars []string
 }
 
 // ConfigResolver merges global and template configurations
@@ -96,6 +100,10 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 	resolved.SyncUseGitignore = r.global.Sync.UseGitignore
 	resolved.SyncCustomDirs = r.global.Sync.CustomDirs
 
+	// Env config from global
+	resolved.EnvDotenvFiles = r.global.Defaults.Env.DotenvFiles
+	resolved.EnvExcludeVars = r.global.Defaults.Env.ExcludeVars
+
 	// Layer 2: Apply template config (overrides global)
 	if r.template != nil {
 		// Apply string fields using coalesce
@@ -152,6 +160,15 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		// ClaudeAuth: template overrides if provided
 		if r.template.ClaudeAuth != nil {
 			resolved.ClaudeAuth = r.template.ClaudeAuth
+		}
+
+		// Env config: template dotenv files override, exclusions append
+		if len(r.template.Env.DotenvFiles) > 0 {
+			resolved.EnvDotenvFiles = r.template.Env.DotenvFiles
+		}
+		if len(r.template.Env.ExcludeVars) > 0 {
+			// Append template exclusions to global exclusions
+			resolved.EnvExcludeVars = append(resolved.EnvExcludeVars, r.template.Env.ExcludeVars...)
 		}
 	}
 

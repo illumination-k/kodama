@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"time"
+
+	"github.com/illumination-k/kodama/pkg/env"
 )
 
 var (
@@ -63,6 +65,7 @@ type SessionConfig struct {
 	ClaudeAuth      *ClaudeAuthOverride `yaml:"claudeAuth,omitempty"`
 	AgentExecutions []AgentExecution    `yaml:"agentExecutions,omitempty"`
 	LastAgentRun    *time.Time          `yaml:"lastAgentRun,omitempty"`
+	Env             env.EnvConfig       `yaml:"env,omitempty"`
 }
 
 // ClaudeAuthOverride allows per-session authentication overrides

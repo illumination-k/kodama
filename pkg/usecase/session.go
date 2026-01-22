@@ -12,6 +12,7 @@ import (
 
 	"github.com/illumination-k/kodama/pkg/agent"
 	"github.com/illumination-k/kodama/pkg/config"
+	"github.com/illumination-k/kodama/pkg/env"
 	"github.com/illumination-k/kodama/pkg/gitcmd"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
 	"github.com/illumination-k/kodama/pkg/sync"
@@ -44,6 +45,8 @@ type StartSessionOptions struct {
 	TtydOptions     string
 	TtydReadonly    bool
 	TtydReadonlySet bool
+	EnvFiles        []string
+	EnvExclude      []string
 }
 
 // AttachSessionOptions contains all options for attaching to a session
@@ -136,6 +139,10 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	ttydPort := config.CoalesceInt(opts.TtydPort, resolved.TtydPort)
 	ttydOptions := config.CoalesceString(opts.TtydOptions, resolved.TtydOptions)
 	ttydWritable := config.CoalesceBool(!opts.TtydReadonly, resolved.TtydWritable, opts.TtydReadonlySet)
+
+	// Env config: CLI overrides resolved
+	envDotenvFiles := config.CoalesceStringSlice(opts.EnvFiles, resolved.EnvDotenvFiles)
+	envExcludeVars := config.CoalesceStringSlice(opts.EnvExclude, resolved.EnvExcludeVars)
 
 	// Validate required fields after merge
 	if namespace == "" {
@@ -231,6 +238,10 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		session.ClaudeAuth = resolved.ClaudeAuth
 	}
 
+	// Apply env config (CLI > template > global)
+	session.Env.DotenvFiles = envDotenvFiles
+	session.Env.ExcludeVars = envExcludeVars
+
 	// Validate session
 	if validateErr := session.Validate(); validateErr != nil {
 		return nil, fmt.Errorf("invalid session configuration: %w", validateErr)
@@ -245,12 +256,18 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	var (
 		k8sClient      *kubernetes.Client
 		podCreated     bool
+		secretCreated  bool
+		secretName     string
 		startSucceeded bool // Set to true at the very end to skip cleanup
 	)
 
 	// Setup cleanup on error - will only run if startSucceeded is false
 	defer func() {
 		if !startSucceeded && k8sClient != nil {
+			// Clean up secret if created
+			if secretCreated && secretName != "" {
+				_ = k8sClient.DeleteSecret(ctx, secretName, namespace)
+			}
 			cleanupFailedStart(ctx, k8sClient, namespace, session.PodName, podCreated)
 		}
 	}()
@@ -271,6 +288,54 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 	// Progress indicator
 	fmt.Printf("Creating session '%s'...\n", opts.Name)
+
+	// 8.5. Load and create dotenv secret (if dotenv files specified)
+	if len(session.Env.DotenvFiles) > 0 {
+		fmt.Printf("📝 Loading dotenv files...\n")
+		fmt.Printf("⚠️  Warning: Ensure .env files are not committed to version control\n")
+
+		// Load dotenv files
+		envVars, err := env.LoadDotenvFiles(session.Env.DotenvFiles)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load dotenv files: %w", err)
+		}
+
+		// Apply exclusions (default + user-specified)
+		excludeList := append(env.DefaultExcludedVars, session.Env.ExcludeVars...)
+		envVars = env.ApplyExclusions(envVars, excludeList)
+
+		// Validate variable names
+		for name := range envVars {
+			if err := env.ValidateVarName(name); err != nil {
+				return nil, fmt.Errorf("invalid variable name '%s': %w", name, err)
+			}
+		}
+
+		// Validate secret size
+		if err := env.ValidateSecretSize(envVars); err != nil {
+			return nil, err
+		}
+
+		// Create secret (only if there are variables to inject)
+		if len(envVars) > 0 {
+			secretName = fmt.Sprintf("kodama-env-%s", session.Name)
+			if err := k8sClient.CreateSecret(ctx, secretName, session.Namespace, envVars); err != nil {
+				return nil, fmt.Errorf("failed to create environment secret: %w", err)
+			}
+			secretCreated = true
+
+			// Update session config with secret info
+			session.Env.SecretName = secretName
+			session.Env.SecretCreated = true
+			if err := store.SaveSession(session); err != nil {
+				return nil, fmt.Errorf("failed to save session: %w", err)
+			}
+
+			fmt.Printf("✅ Loaded %d environment variables\n", len(envVars))
+		} else {
+			fmt.Printf("⚠️  All variables were excluded - no environment variables will be injected\n")
+		}
+	}
 
 	// 9. Create pod
 	fmt.Println("⏳ Creating pod...")
@@ -310,6 +375,9 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		CustomResources: customResources,
 		GitSecretName:   effectiveGitSecret,
 		Command:         effectiveCommand,
+
+		// Environment variables secret
+		EnvSecretName: secretName,
 
 		// Git configuration for workspace-initializer init container
 		GitRepo:         repo,

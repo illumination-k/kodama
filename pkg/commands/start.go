@@ -33,6 +33,8 @@ func NewStartCommand() *cobra.Command {
 		ttydPort        int
 		ttydOptions     string
 		ttydReadonly    bool
+		envFiles        []string
+		envExclude      []string
 	)
 
 	cmd := &cobra.Command{
@@ -90,6 +92,8 @@ Examples:
 				TtydOptions:     ttydOptions,
 				TtydReadonly:    ttydReadonly,
 				TtydReadonlySet: cmd.Flags().Changed("ttyd-readonly"),
+				EnvFiles:        envFiles,
+				EnvExclude:      envExclude,
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -146,6 +150,8 @@ Examples:
 	cmd.Flags().IntVar(&ttydPort, "ttyd-port", 0, "Ttyd port (default: 7681)")
 	cmd.Flags().StringVar(&ttydOptions, "ttyd-options", "", "Additional ttyd options")
 	cmd.Flags().BoolVar(&ttydReadonly, "ttyd-readonly", false, "Enable read-only mode for ttyd (disables terminal input)")
+	cmd.Flags().StringSliceVar(&envFiles, "env-file", []string{}, "Dotenv file(s) to load (can be specified multiple times)")
+	cmd.Flags().StringSliceVar(&envExclude, "env-exclude", []string{}, "Environment variable names to exclude from injection (can be specified multiple times)")
 
 	return cmd
 }

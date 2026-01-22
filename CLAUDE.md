@@ -87,7 +87,20 @@ Multi-tier configuration system:
 
 - **Store**: Manages YAML session configs in `~/.kodama/sessions/`
 - **Priority**: CLI flags > template config (`.kodama.yaml`) > global config > defaults
-- Session state tracks pod, PVCs, sync status, agent history
+- Session state tracks pod, PVCs, sync status, agent history, environment config
+
+#### `pkg/env/`
+
+Dotenv file loading and environment variable injection:
+
+- **LoadDotenvFiles**: Parses dotenv files with last-wins precedence for duplicate variables
+- **ApplyExclusions**: Filters out system-critical and user-specified variables
+- **ValidateVarName**: Ensures variable names match `^[A-Z_][A-Z0-9_]*$` pattern
+- **ValidateSecretSize**: Checks that environment data doesn't exceed 1MB K8s secret limit
+- **DefaultExcludedVars**: System variables that should never be overridden (PATH, HOME, K8s vars, Claude auth)
+- Files are read from local machine (where `kubectl kodama` runs), not from git repo
+- Creates K8s secrets with environment variables and injects via `envFrom`
+- Secrets are automatically cleaned up on session deletion
 
 #### `pkg/kubernetes/`
 
@@ -243,7 +256,8 @@ Ttyd mode uses kubectl port-forward with automatic port allocation (default 7681
 Tests exist for key packages:
 
 - `pkg/config`: Configuration loading and merging
-- `pkg/kubernetes`: Pod spec generation
+- `pkg/env`: Dotenv parsing, validation, and exclusions
+- `pkg/kubernetes`: Pod spec generation and secret management
 - `pkg/gitcmd`: Git script generation and validation
 - `pkg/sync/exclude`: Pattern matching logic
 
@@ -271,15 +285,27 @@ git:
 sync:
   useGitignore: true
   excludePatterns: ["*.log", "tmp/"]
+
+env:
+  excludeVars: []  # Additional vars to exclude beyond defaults
 ```
 
 ### Session Template (`.kodama.yaml` in repo root)
 
 Per-repository defaults that override global config. Used when starting sessions in that repo.
 
+```yaml
+env:
+  dotenvFiles:
+    - .env
+    - .env.local
+  excludeVars:
+    - VERBOSE  # Example: don't inject this var
+```
+
 ### Session State (`~/.kodama/sessions/<name>.yaml`)
 
-Tracks complete session state including pod, PVCs, git info, sync status, agent history.
+Tracks complete session state including pod, PVCs, git info, sync status, agent history, and environment secret info (secret name, creation status).
 
 ## Dependencies
 
