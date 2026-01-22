@@ -83,14 +83,17 @@ func TestLoadDotenvFiles(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tmpDir)
+			defer func() {
+				_ = os.RemoveAll(tmpDir)
+			}()
 
 			// Create test files
 			var filePaths []string
 			for name, content := range tt.files {
 				path := filepath.Join(tmpDir, name)
-				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-					t.Fatalf("failed to create test file %s: %v", name, err)
+				writeErr := os.WriteFile(path, []byte(content), 0o600)
+				if writeErr != nil {
+					t.Fatalf("failed to create test file %s: %v", name, writeErr)
 				}
 			}
 

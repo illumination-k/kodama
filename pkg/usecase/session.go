@@ -301,7 +301,9 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 
 		// Apply exclusions (default + user-specified)
-		excludeList := append(env.DefaultExcludedVars, session.Env.ExcludeVars...)
+		excludeList := make([]string, len(env.DefaultExcludedVars))
+		copy(excludeList, env.DefaultExcludedVars)
+		excludeList = append(excludeList, session.Env.ExcludeVars...)
 		envVars = env.ApplyExclusions(envVars, excludeList)
 
 		// Validate variable names

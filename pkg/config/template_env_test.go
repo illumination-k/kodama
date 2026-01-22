@@ -14,7 +14,9 @@ func TestLoadSessionTemplate_WithEnvConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	// Create test template with env config
 	templatePath := filepath.Join(tmpDir, ".kodama.yaml")
@@ -28,7 +30,8 @@ env:
     - DEBUG_MODE
 `
 
-	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
+	err = os.WriteFile(templatePath, []byte(templateContent), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write template file: %v", err)
 	}
 
