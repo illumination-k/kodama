@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/illumination-k/kodama/pkg/env"
+	"github.com/illumination-k/kodama/pkg/secretfile"
 )
 
 var (
@@ -42,28 +43,29 @@ type AgentExecution struct {
 //
 //nolint:govet // fieldalignment: accepting minor memory overhead for logical field grouping
 type SessionConfig struct {
-	CreatedAt       time.Time        `yaml:"createdAt"`
-	UpdatedAt       time.Time        `yaml:"updatedAt"`
-	Sync            SyncConfig       `yaml:"sync,omitempty"`
-	Resources       ResourceConfig   `yaml:"resources,omitempty"`
-	Ttyd            TtydConfig       `yaml:"ttyd,omitempty"`
-	Name            string           `yaml:"name"`
-	Namespace       string           `yaml:"namespace"`
-	Repo            string           `yaml:"repo"`
-	Branch          string           `yaml:"branch"`
-	BaseBranch      string           `yaml:"baseBranch,omitempty"`
-	PodName         string           `yaml:"podName"`
-	WorkspacePVC    string           `yaml:"workspacePVC"`
-	ClaudeHomePVC   string           `yaml:"claudeHomePVC"`
-	CommitHash      string           `yaml:"commitHash,omitempty"`
-	Image           string           `yaml:"image,omitempty"`
-	Command         []string         `yaml:"command,omitempty"`
-	GitClone        GitCloneConfig   `yaml:"gitClone,omitempty"`
-	Status          SessionStatus    `yaml:"status"`
-	AutoBranch      bool             `yaml:"autoBranch,omitempty"`
-	AgentExecutions []AgentExecution `yaml:"agentExecutions,omitempty"`
-	LastAgentRun    *time.Time       `yaml:"lastAgentRun,omitempty"`
-	Env             env.EnvConfig    `yaml:"env,omitempty"`
+	CreatedAt       time.Time                   `yaml:"createdAt"`
+	UpdatedAt       time.Time                   `yaml:"updatedAt"`
+	Sync            SyncConfig                  `yaml:"sync,omitempty"`
+	Resources       ResourceConfig              `yaml:"resources,omitempty"`
+	Ttyd            TtydConfig                  `yaml:"ttyd,omitempty"`
+	Name            string                      `yaml:"name"`
+	Namespace       string                      `yaml:"namespace"`
+	Repo            string                      `yaml:"repo"`
+	Branch          string                      `yaml:"branch"`
+	BaseBranch      string                      `yaml:"baseBranch,omitempty"`
+	PodName         string                      `yaml:"podName"`
+	WorkspacePVC    string                      `yaml:"workspacePVC"`
+	ClaudeHomePVC   string                      `yaml:"claudeHomePVC"`
+	CommitHash      string                      `yaml:"commitHash,omitempty"`
+	Image           string                      `yaml:"image,omitempty"`
+	Command         []string                    `yaml:"command,omitempty"`
+	GitClone        GitCloneConfig              `yaml:"gitClone,omitempty"`
+	Status          SessionStatus               `yaml:"status"`
+	AutoBranch      bool                        `yaml:"autoBranch,omitempty"`
+	AgentExecutions []AgentExecution            `yaml:"agentExecutions,omitempty"`
+	LastAgentRun    *time.Time                  `yaml:"lastAgentRun,omitempty"`
+	Env             env.EnvConfig               `yaml:"env,omitempty"`
+	SecretFile      secretfile.SecretFileConfig `yaml:"secretFile,omitempty"`
 }
 
 // GitCloneConfig holds git clone options

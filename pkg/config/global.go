@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/illumination-k/kodama/pkg/env"
+	"github.com/illumination-k/kodama/pkg/secretfile"
 )
 
 // GlobalConfig represents global configuration for Kodama
@@ -12,13 +13,14 @@ type GlobalConfig struct {
 
 // DefaultsConfig holds default values for session creation
 type DefaultsConfig struct {
-	Namespace    string         `yaml:"namespace"`
-	Image        string         `yaml:"image"`
-	Resources    ResourceConfig `yaml:"resources"`
-	Storage      StorageConfig  `yaml:"storage"`
-	Ttyd         TtydConfig     `yaml:"ttyd"`
-	BranchPrefix string         `yaml:"branchPrefix"`
-	Env          env.EnvConfig  `yaml:"env,omitempty"`
+	Namespace    string                      `yaml:"namespace"`
+	Image        string                      `yaml:"image"`
+	Resources    ResourceConfig              `yaml:"resources"`
+	Storage      StorageConfig               `yaml:"storage"`
+	Ttyd         TtydConfig                  `yaml:"ttyd"`
+	BranchPrefix string                      `yaml:"branchPrefix"`
+	Env          env.EnvConfig               `yaml:"env,omitempty"`
+	SecretFile   secretfile.SecretFileConfig `yaml:"secretFile,omitempty"`
 }
 
 // StorageConfig holds default storage sizes
@@ -120,5 +122,9 @@ func (g *GlobalConfig) Merge(other *GlobalConfig) {
 	if len(other.Defaults.Env.ExcludeVars) > 0 {
 		// Append to existing exclusions rather than replacing
 		g.Defaults.Env.ExcludeVars = append(g.Defaults.Env.ExcludeVars, other.Defaults.Env.ExcludeVars...)
+	}
+	// Merge secret file config
+	if len(other.Defaults.SecretFile.Files) > 0 {
+		g.Defaults.SecretFile.Files = other.Defaults.SecretFile.Files
 	}
 }

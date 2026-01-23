@@ -34,6 +34,7 @@ func NewStartCommand() *cobra.Command {
 		ttydReadonly    bool
 		envFiles        []string
 		envExclude      []string
+		secretFiles     []string
 	)
 
 	cmd := &cobra.Command{
@@ -64,6 +65,19 @@ Examples:
 				customResourcesMap[parts[0]] = parts[1]
 			}
 
+			// Parse secret files (Docker -v style: source:destination)
+			secretFileMappings := make([]usecase.SecretFileMapping, 0, len(secretFiles))
+			for _, mapping := range secretFiles {
+				parts := strings.SplitN(mapping, ":", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid secret file format: %s (expected format: source:destination, e.g., ~/.ssh/id_rsa:/root/.ssh/id_rsa)", mapping)
+				}
+				secretFileMappings = append(secretFileMappings, usecase.SecretFileMapping{
+					Source:      parts[0],
+					Destination: parts[1],
+				})
+			}
+
 			kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
 
 			opts := usecase.StartSessionOptions{
@@ -92,6 +106,7 @@ Examples:
 				TtydReadonlySet: cmd.Flags().Changed("ttyd-readonly"),
 				EnvFiles:        envFiles,
 				EnvExclude:      envExclude,
+				SecretFiles:     secretFileMappings,
 			}
 
 			session, err := usecase.StartSession(context.Background(), opts)
@@ -149,6 +164,7 @@ Examples:
 	cmd.Flags().BoolVar(&ttydReadonly, "ttyd-readonly", false, "Enable read-only mode for ttyd (disables terminal input)")
 	cmd.Flags().StringSliceVar(&envFiles, "env-file", []string{}, "Dotenv file(s) to load (can be specified multiple times)")
 	cmd.Flags().StringSliceVar(&envExclude, "env-exclude", []string{}, "Environment variable names to exclude from injection (can be specified multiple times)")
+	cmd.Flags().StringSliceVar(&secretFiles, "secret-file", []string{}, "Inject file as secret (format: source:destination, e.g., ~/.ssh/id_rsa:/root/.ssh/id_rsa, can be specified multiple times)")
 
 	return cmd
 }
