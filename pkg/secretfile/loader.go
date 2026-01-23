@@ -18,7 +18,7 @@ func LoadFiles(mappings []FileMapping) (map[string][]byte, error) {
 		sourcePath := expandHomeDir(mapping.Source)
 
 		// Read file contents (binary-safe)
-		content, err := os.ReadFile(sourcePath)
+		content, err := os.ReadFile(sourcePath) // #nosec G304 -- Reading user-configured secret files from local machine
 		if err != nil {
 			if os.IsNotExist(err) {
 				// Soft failure: warn but continue
