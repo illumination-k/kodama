@@ -32,6 +32,10 @@ type PodSpec struct {
 	// Environment variables from dotenv files
 	EnvSecretName string // K8s secret containing dotenv variables
 
+	// Secret files to mount
+	FileSecretName string            // K8s secret name for files
+	FileMappings   map[string]string // secretKey → destinationPath
+
 	// Git repository configuration for workspace-initializer init container
 	GitRepo         string // Git repository URL (empty if no repo)
 	GitBranch       string // Feature branch name to create

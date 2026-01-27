@@ -15,9 +15,16 @@ import (
 	"github.com/illumination-k/kodama/pkg/env"
 	"github.com/illumination-k/kodama/pkg/gitcmd"
 	"github.com/illumination-k/kodama/pkg/kubernetes"
+	"github.com/illumination-k/kodama/pkg/secretfile"
 	"github.com/illumination-k/kodama/pkg/sync"
 	"github.com/illumination-k/kodama/pkg/sync/exclude"
 )
+
+// SecretFileMapping represents a file to inject as a secret
+type SecretFileMapping struct {
+	Source      string // Local file path
+	Destination string // Pod file path (absolute)
+}
 
 // StartSessionOptions contains all options for starting a session
 type StartSessionOptions struct {
@@ -46,6 +53,7 @@ type StartSessionOptions struct {
 	TtydReadonlySet bool
 	EnvFiles        []string
 	EnvExclude      []string
+	SecretFiles     []SecretFileMapping
 }
 
 // AttachSessionOptions contains all options for attaching to a session
@@ -236,6 +244,20 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	session.Env.DotenvFiles = envDotenvFiles
 	session.Env.ExcludeVars = envExcludeVars
 
+	// Apply secret file mappings (CLI > template > global)
+	// Convert CLI SecretFileMapping to config.secretfile.FileMapping
+	if len(opts.SecretFiles) > 0 {
+		session.SecretFile.Files = make([]secretfile.FileMapping, len(opts.SecretFiles))
+		for i, mapping := range opts.SecretFiles {
+			session.SecretFile.Files[i] = secretfile.FileMapping{
+				Source:      mapping.Source,
+				Destination: mapping.Destination,
+			}
+		}
+	} else if len(resolved.SecretFileMappings) > 0 {
+		session.SecretFile.Files = resolved.SecretFileMappings
+	}
+
 	// Validate session
 	if validateErr := session.Validate(); validateErr != nil {
 		return nil, fmt.Errorf("invalid session configuration: %w", validateErr)
@@ -248,17 +270,23 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 	// Track which Kubernetes resources are created for cleanup on failure
 	var (
-		k8sClient      *kubernetes.Client
-		podCreated     bool
-		secretCreated  bool
-		secretName     string
-		startSucceeded bool // Set to true at the very end to skip cleanup
+		k8sClient         *kubernetes.Client
+		podCreated        bool
+		secretCreated     bool
+		secretName        string
+		fileSecretCreated bool
+		fileSecretName    string
+		startSucceeded    bool // Set to true at the very end to skip cleanup
 	)
 
 	// Setup cleanup on error - will only run if startSucceeded is false
 	defer func() {
 		if !startSucceeded && k8sClient != nil {
-			// Clean up secret if created
+			// Clean up file secret if created
+			if fileSecretCreated && fileSecretName != "" {
+				_ = k8sClient.DeleteSecret(ctx, fileSecretName, namespace)
+			}
+			// Clean up env secret if created
 			if secretCreated && secretName != "" {
 				_ = k8sClient.DeleteSecret(ctx, secretName, namespace)
 			}
@@ -333,6 +361,48 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 	}
 
+	// 8.6. Load and create file secret (if secret files specified)
+	if len(session.SecretFile.Files) > 0 {
+		fmt.Printf("🔐 Loading secret files...\n")
+
+		// Validate mappings
+		if err := secretfile.ValidateMappings(session.SecretFile.Files); err != nil {
+			return nil, fmt.Errorf("invalid secret file mappings: %w", err)
+		}
+
+		// Load file contents
+		fileContents, err := secretfile.LoadFiles(session.SecretFile.Files)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load secret files: %w", err)
+		}
+
+		// Validate secret size
+		if err := secretfile.ValidateSecretSize(fileContents); err != nil {
+			return nil, err
+		}
+
+		// Create secret (only if there are files to inject)
+		if len(fileContents) > 0 {
+			fileSecretName = fmt.Sprintf("kodama-secret-files-%s", session.Name)
+
+			if err := k8sClient.CreateFileSecret(ctx, fileSecretName, session.Namespace, fileContents); err != nil {
+				return nil, fmt.Errorf("failed to create secret file: %w", err)
+			}
+			fileSecretCreated = true
+
+			// Update session config with secret info
+			session.SecretFile.SecretName = fileSecretName
+			session.SecretFile.SecretCreated = true
+			if err := store.SaveSession(session); err != nil {
+				return nil, fmt.Errorf("failed to save session: %w", err)
+			}
+
+			fmt.Printf("✅ Loaded %d secret files\n", len(fileContents))
+		} else {
+			fmt.Printf("⚠️  No secret files were loaded (files may not exist)\n")
+		}
+	}
+
 	// 9. Create pod
 	fmt.Println("⏳ Creating pod...")
 
@@ -359,6 +429,15 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		effectiveCommand = []string{"sleep", "infinity"}
 	}
 
+	// Build file mappings for pod spec (secretKey → destPath)
+	fileMappings := make(map[string]string)
+	if fileSecretName != "" {
+		for _, mapping := range session.SecretFile.Files {
+			secretKey := secretfile.EncodeSecretKey(mapping.Destination)
+			fileMappings[secretKey] = mapping.Destination
+		}
+	}
+
 	podSpec := &kubernetes.PodSpec{
 		Name:            session.PodName,
 		Namespace:       namespace,
@@ -370,6 +449,10 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 		// Environment variables secret
 		EnvSecretName: secretName,
+
+		// Secret files to mount
+		FileSecretName: fileSecretName,
+		FileMappings:   fileMappings,
 
 		// Git configuration for workspace-initializer init container
 		GitRepo:         repo,

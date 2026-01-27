@@ -194,6 +194,28 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		})
 	}
 
+	// Add secret file volume and mounts if specified
+	if spec.FileSecretName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "kodama-files",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: spec.FileSecretName,
+				},
+			},
+		})
+
+		// Mount each file using subPath to avoid overwriting directories
+		for secretKey, destPath := range spec.FileMappings {
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      "kodama-files",
+				MountPath: destPath,
+				SubPath:   secretKey,
+				ReadOnly:  true,
+			})
+		}
+	}
+
 	pod.Spec.Volumes = volumes
 	pod.Spec.Containers[0].VolumeMounts = volumeMounts
 

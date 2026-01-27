@@ -1,5 +1,7 @@
 package config
 
+import "github.com/illumination-k/kodama/pkg/secretfile"
+
 // ResolvedConfig represents the merged configuration from global and template sources
 // This does NOT include CLI flags, which are applied at the usecase layer
 type ResolvedConfig struct {
@@ -35,6 +37,9 @@ type ResolvedConfig struct {
 	// Env config (merged from template and global)
 	EnvDotenvFiles []string
 	EnvExcludeVars []string
+
+	// Secret file config (template completely replaces global)
+	SecretFileMappings []secretfile.FileMapping
 }
 
 // ConfigResolver merges global and template configurations
@@ -101,6 +106,9 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 	resolved.EnvDotenvFiles = r.global.Defaults.Env.DotenvFiles
 	resolved.EnvExcludeVars = r.global.Defaults.Env.ExcludeVars
 
+	// Secret file config from global
+	resolved.SecretFileMappings = r.global.Defaults.SecretFile.Files
+
 	// Layer 2: Apply template config (overrides global)
 	if r.template != nil {
 		// Apply string fields using coalesce
@@ -161,6 +169,11 @@ func (r *ConfigResolver) Resolve() *ResolvedConfig {
 		if len(r.template.Env.ExcludeVars) > 0 {
 			// Append template exclusions to global exclusions
 			resolved.EnvExcludeVars = append(resolved.EnvExcludeVars, r.template.Env.ExcludeVars...)
+		}
+
+		// Secret file config: template completely replaces global (no merge)
+		if len(r.template.SecretFile.Files) > 0 {
+			resolved.SecretFileMappings = r.template.SecretFile.Files
 		}
 	}
 

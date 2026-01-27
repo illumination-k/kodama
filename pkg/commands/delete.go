@@ -112,6 +112,16 @@ func runDelete(name string, keepConfig, force bool, kubeconfigPath string) error
 			}
 		}
 
+		// 4a.5. Delete secret file if exists
+		if session.SecretFile.SecretCreated && session.SecretFile.SecretName != "" {
+			fmt.Println("🗑️  Deleting secret file...")
+			if err := k8sClient.DeleteSecret(ctx, session.SecretFile.SecretName, session.Namespace); err != nil {
+				fmt.Printf("⚠️  Warning: Failed to delete secret file: %v\n", err)
+			} else {
+				fmt.Println("✓ Secret file deleted")
+			}
+		}
+
 		// 4b. Delete pod
 		fmt.Println("⏳ Deleting pod...")
 		if err := k8sClient.DeletePod(ctx, session.PodName, session.Namespace); err != nil {
