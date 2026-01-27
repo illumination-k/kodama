@@ -49,45 +49,175 @@ mise run clean             # Remove build artifacts
 
 ## Architecture Overview
 
-Kodama follows a clean architecture with clear separation of concerns:
+Kodama follows **Hexagonal Architecture (Ports & Adapters)** with clear separation of concerns and dependency inversion:
 
 ### Layer Structure
 
 ```
-CLI Commands (cobra)
-    ↓
-Usecase Layer (orchestration)
-    ↓
-┌────────────────────────────────────────────────┐
-│  Config    - Session/global state management   │
-│  Kubernetes - Pod lifecycle & K8s operations   │
-│  Gitcmd    - Git script generation             │
-│  Sync      - File synchronization              │
-│  Agent     - Coding agent execution            │
-└────────────────────────────────────────────────┘
+Presentation Layer (pkg/presentation)
+  ↓ uses
+Application Layer (pkg/application)
+  ↓ uses (via port interfaces)
+Infrastructure Layer (pkg/infrastructure)
+  ↓ implements
+Port Interfaces (pkg/application/port)
+  ↑ defined by application needs
 ```
 
-### Key Packages
+**Dependency Rule**: Outer layers depend on inner layers. Infrastructure implements interfaces defined by the application layer.
 
-#### `pkg/commands/`
+### Directory Structure
 
-Cobra CLI commands that translate user input to usecase options. Each command (start, attach, list, delete, dev) handles flag parsing and delegates to usecases.
+```
+pkg/
+├── presentation/          # CLI layer (Cobra commands)
+│   └── commands/         # delete.go, list.go (refactored)
+│
+├── application/          # Application services & orchestration
+│   ├── port/            # Port interfaces (dependency inversion)
+│   │   ├── repository.go    # SessionRepository, ConfigRepository
+│   │   ├── kubernetes.go    # KubernetesClient
+│   │   ├── sync.go         # SyncManager
+│   │   └── agent.go        # AgentExecutor
+│   ├── service/         # Service layer
+│   │   └── session.go       # SessionService (DI container)
+│   └── app.go           # Dependency injection wiring
+│
+├── infrastructure/       # Adapters implementing ports
+│   ├── kubernetes/      # Wraps pkg/kubernetes
+│   │   └── adapter.go
+│   ├── sync/            # Wraps pkg/sync
+│   │   └── adapter.go
+│   ├── agent/           # Wraps pkg/agent
+│   │   └── adapter.go
+│   └── repository/      # File-based persistence
+│       ├── session_file.go
+│       └── config_file.go
+│
+├── commands/            # Legacy commands (being migrated)
+│   ├── start.go        # TODO: Refactor to use SessionService
+│   ├── attach.go       # TODO: Refactor to use SessionService
+│   └── dev.go          # TODO: Refactor to use SessionService
+│
+├── usecase/            # Legacy orchestration (being migrated)
+│   └── session.go      # TODO: Split into focused use cases
+│
+└── [domain packages]   # Core business logic
+    ├── config/         # Session & global configuration
+    ├── kubernetes/     # K8s client implementation
+    ├── sync/           # File synchronization
+    ├── agent/          # Coding agent execution
+    ├── env/            # Environment variable handling
+    ├── gitcmd/         # Git command generation
+    └── secretfile/     # Secret file handling
+```
 
-#### `pkg/usecase/`
+### Key Components
 
-Orchestration layer coordinating all components:
+#### `pkg/application/app.go` - Dependency Injection
 
-- **StartSession**: Creates pod with init containers (Claude installer, ttyd, git clone), performs file sync, starts agent tasks
-- **AttachSession**: Routes to ttyd (web) or TTY (exec) mode for interactive access
-- Uses deferred cleanup to remove resources on failure
+Single source of truth for wiring all dependencies:
 
-#### `pkg/config/`
+```go
+type App struct {
+    SessionService *service.SessionService
+}
 
-Multi-tier configuration system:
+func NewApp(kubeconfigPath string) (*App, error) {
+    // Create infrastructure adapters
+    k8sClient, _ := kubernetesAdapter.NewAdapter(kubeconfigPath)
+    syncMgr := syncAdapter.NewAdapter()
+    agentExec := agentAdapter.NewAdapter()
+    sessionRepo, _ := repository.NewSessionFileRepository()
+    configRepo, _ := repository.NewConfigFileRepository()
 
-- **Store**: Manages YAML session configs in `~/.kodama/sessions/`
+    // Wire services with constructor injection
+    sessionService := service.NewSessionService(
+        sessionRepo, configRepo, k8sClient, syncMgr, agentExec,
+    )
+
+    return &App{SessionService: sessionService}, nil
+}
+```
+
+#### `pkg/application/service/session.go` - SessionService
+
+Provides high-level session operations using dependency injection:
+
+- Accepts all dependencies as port interfaces
+- Provides session CRUD operations
+- Delegates to infrastructure adapters
+- Acts as facade for presentation layer
+
+#### `pkg/application/port/` - Port Interfaces
+
+Dependency inversion interfaces defining contracts:
+
+- **SessionRepository**: Session persistence (LoadSession, SaveSession, DeleteSession, ListSessions)
+- **ConfigRepository**: Global config persistence (LoadGlobalConfig, SaveGlobalConfig)
+- **KubernetesClient**: K8s operations (CreatePod, DeletePod, GetPod, CreateSecret, etc.)
+- **SyncManager**: File synchronization (InitialSync, Start, Stop, Status)
+- **AgentExecutor**: Coding agent tasks (TaskStart)
+
+#### `pkg/infrastructure/` - Adapters
+
+Thin wrappers implementing port interfaces:
+
+- **kubernetes/adapter.go**: Wraps existing `pkg/kubernetes.Client`
+- **sync/adapter.go**: Wraps existing `pkg/sync.SyncManager`
+- **agent/adapter.go**: Wraps existing `pkg/agent.CodingAgentExecutor`
+- **repository/**: File-based storage for sessions and config
+
+#### `pkg/presentation/commands/` - CLI Layer
+
+Cobra commands using dependency injection:
+
+- **delete.go**: Refactored ✅ - Uses SessionService instead of direct clients
+- **list.go**: Refactored ✅ - Uses SessionService instead of direct clients
+- **start.go, attach.go, dev.go**: Legacy (in `pkg/commands/`) - TODO: Migrate
+
+#### `pkg/config/` - Domain Configuration
+
+Multi-tier configuration system (domain entities):
+
+- **SessionConfig**: Session state (pod, namespace, repo, sync, resources, agent history)
+- **GlobalConfig**: Global defaults and sync configuration
+- **ConfigResolver**: Merges global + template + CLI flags
+- **Store**: File-based persistence (wrapped by infrastructure/repository)
 - **Priority**: CLI flags > template config (`.kodama.yaml`) > global config > defaults
-- Session state tracks pod, PVCs, sync status, agent history, environment config
+
+### Migration Status
+
+The codebase is **in transition** to the new Hexagonal Architecture:
+
+#### ✅ Refactored (New Architecture)
+
+- `pkg/application/` - Complete with ports, services, and DI wiring
+- `pkg/infrastructure/` - All adapters implemented
+- `pkg/presentation/commands/delete.go` - Uses SessionService ✅
+- `pkg/presentation/commands/list.go` - Uses SessionService ✅
+- `cmd/kubectl-kodama/main.go` - Bootstraps with DI ✅
+
+#### ⏳ Legacy (To Be Migrated)
+
+- `pkg/commands/start.go` - Still uses direct client instantiation
+- `pkg/commands/attach.go` - Still uses direct client instantiation
+- `pkg/commands/dev.go` - Still uses direct client instantiation
+- `pkg/usecase/session.go` - 800-line god function, should be split
+
+#### 📝 Migration Priority
+
+1. Refactor `start.go` - Most complex, highest value
+2. Refactor `attach.go` - Moderate complexity
+3. Refactor `dev.go` - Depends on start + attach
+4. Split `usecase/session.go` into focused use cases
+5. Delete `pkg/commands/` (replaced by `pkg/presentation/commands/`)
+
+**Note**: Both old and new commands work simultaneously during migration. The CLI is fully functional.
+
+### Core Domain Packages
+
+The following packages contain domain logic and implementations. In the new architecture, they are accessed via infrastructure adapters (not directly from presentation layer).
 
 #### `pkg/env/`
 
@@ -155,6 +285,55 @@ Coding agent execution system:
 
 ## Key Design Patterns
 
+### Dependency Inversion Principle
+
+All infrastructure dependencies are accessed via port interfaces defined in `pkg/application/port/`. This allows:
+
+- **Testability**: Mock implementations for unit testing
+- **Flexibility**: Swap implementations without changing application logic
+- **Clear boundaries**: Application layer doesn't depend on infrastructure
+
+Example:
+
+```go
+// Application layer defines what it needs (port)
+type KubernetesClient interface {
+    CreatePod(ctx context.Context, spec *PodSpec) error
+    DeletePod(ctx context.Context, name, namespace string) error
+}
+
+// Infrastructure layer provides implementation (adapter)
+type Adapter struct {
+    client *k8s.Client
+}
+
+func (a *Adapter) CreatePod(ctx context.Context, spec *PodSpec) error {
+    return a.client.CreatePod(ctx, spec)
+}
+```
+
+### Constructor Injection
+
+All services receive dependencies through constructors:
+
+```go
+func NewSessionService(
+    sessionRepo port.SessionRepository,
+    configRepo port.ConfigRepository,
+    k8sClient port.KubernetesClient,
+    syncMgr port.SyncManager,
+    agentExecutor port.AgentExecutor,
+) *SessionService {
+    return &SessionService{...}
+}
+```
+
+Benefits:
+
+- Dependencies are explicit and compile-time checked
+- Easy to test with mock implementations
+- Single wiring location in `app.go`
+
 ### Configuration Hierarchy
 
 CLI flags override template config (`.kodama.yaml` in repo), which overrides global config (`~/.kodama/config.yaml`), which overrides hardcoded defaults.
@@ -180,10 +359,12 @@ The usecase layer tracks resources created during session start and cleans them 
 
 ### Interface-Based Design
 
-Key components use interfaces to enable testing and future extensibility:
+Port interfaces enable testing and future extensibility:
 
-- `SyncManager` - allows alternative sync implementations
-- `CodingAgentExecutor` - allows mock execution in tests
+- `SessionRepository` / `ConfigRepository` - allows alternative storage backends
+- `KubernetesClient` - allows mocking K8s operations
+- `SyncManager` - allows alternative sync implementations (mutagen, etc.)
+- `AgentExecutor` - allows mock execution in tests
 - `AuthProvider` - supports multiple auth methods
 
 ## Session Lifecycle
@@ -312,9 +493,85 @@ Tracks complete session state including pod, PVCs, git info, sync status, agent 
 
 ## Extension Points
 
-To add new features:
+### Adding New Features
 
-### New Init Container Installer
+#### New Command (Recommended Pattern)
+
+Create command in `pkg/presentation/commands/` using dependency injection:
+
+```go
+package commands
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/illumination-k/kodama/pkg/application/service"
+)
+
+func NewMyCommand(sessionService *service.SessionService) *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "mycommand",
+        Short: "Description",
+        RunE: func(cmd *cobra.Command, args []string) error {
+            // Use sessionService methods
+            sessions, err := sessionService.ListSessions()
+            // ... business logic
+            return nil
+        },
+    }
+    return cmd
+}
+```
+
+Register in `pkg/presentation/commands/root.go`:
+
+```go
+cmd.AddCommand(NewMyCommand(app.SessionService))
+```
+
+#### New Port Interface (for new infrastructure)
+
+Define interface in `pkg/application/port/`:
+
+```go
+package port
+
+type DatabaseClient interface {
+    Query(sql string) ([]Row, error)
+    Execute(sql string) error
+}
+```
+
+Create adapter in `pkg/infrastructure/database/`:
+
+```go
+package database
+
+import "github.com/illumination-k/kodama/pkg/application/port"
+
+type Adapter struct {
+    db *SomeDB
+}
+
+func NewAdapter(connStr string) (port.DatabaseClient, error) {
+    db, err := SomeDB.Connect(connStr)
+    return &Adapter{db: db}, err
+}
+
+func (a *Adapter) Query(sql string) ([]Row, error) {
+    return a.db.Query(sql)
+}
+```
+
+Wire in `pkg/application/app.go`:
+
+```go
+dbClient, _ := database.NewAdapter(connStr)
+sessionService := service.NewSessionService(
+    sessionRepo, configRepo, k8sClient, syncMgr, agentExec, dbClient,
+)
+```
+
+#### New Init Container Installer
 
 Implement `initcontainer.InstallerConfig` interface in `pkg/kubernetes/initcontainer/`. Example:
 
@@ -338,17 +595,140 @@ func (m *MyInstallerConfig) CompletionMessage() string { return "Done" }
 
 Then add to `buildInitContainers()` in `pkg/kubernetes/pod.go`.
 
-### New Sync Implementation
+#### New Sync Implementation
 
-Implement `sync.SyncManager` interface in `pkg/sync/`. Update `pkg/usecase/start.go` to instantiate your implementation.
+Implement `port.SyncManager` interface:
 
-### New Auth Provider
+```go
+package mysync
+
+import "github.com/illumination-k/kodama/pkg/application/port"
+
+type MyAdapter struct {
+    // ... fields
+}
+
+func NewAdapter() port.SyncManager {
+    return &MyAdapter{}
+}
+
+func (a *MyAdapter) InitialSync(ctx, localPath, namespace, podName string, cfg *exclude.Config) error {
+    // Your implementation
+}
+// ... implement other methods
+```
+
+Update `pkg/application/app.go` to use your adapter:
+
+```go
+syncMgr := mysync.NewAdapter()  // Instead of syncAdapter.NewAdapter()
+```
+
+#### New Auth Provider
 
 Implement `auth.AuthProvider` interface in `pkg/agent/auth/`. Add to factory logic in `provider.go`.
 
-### New Command
+### Migration Guidelines
 
-Create file in `pkg/commands/`, implement cobra command, register in `root.go`.
+When refactoring legacy commands to new architecture:
+
+1. **Create new command** in `pkg/presentation/commands/`
+2. **Accept SessionService** via constructor injection
+3. **Use SessionService methods** instead of direct client instantiation:
+   - ❌ `store, _ := config.NewStore(); session, _ := store.LoadSession(name)`
+   - ✅ `session, _ := sessionService.LoadSession(name)`
+4. **Update root.go** to pass SessionService to new command
+5. **Test** that command works with new architecture
+6. **Remove old command** from `pkg/commands/`
+
+### Architecture Validation
+
+Before committing changes, verify layer boundaries:
+
+```bash
+# Presentation layer should NOT import infrastructure directly
+grep -r "pkg/kubernetes" pkg/presentation/commands/  # Should return nothing
+grep -r "pkg/sync" pkg/presentation/commands/        # Should return nothing
+
+# Build and test
+go build -o bin/kubectl-kodama ./cmd/kubectl-kodama
+go test ./...
+```
+
+### Testing with Mocks
+
+Example: Testing a command with mock SessionService
+
+```go
+// Create mock implementing port.SessionRepository
+type MockSessionRepo struct {
+    sessions []*config.SessionConfig
+}
+
+func (m *MockSessionRepo) LoadSession(name string) (*config.SessionConfig, error) {
+    // Return test data
+}
+
+// Wire mock into SessionService
+sessionService := service.NewSessionService(
+    mockSessionRepo,
+    mockConfigRepo,
+    mockK8sClient,
+    mockSyncMgr,
+    mockAgentExec,
+)
+
+// Test command using mocked service
+```
+
+## Benefits of Hexagonal Architecture
+
+The refactoring to Hexagonal Architecture provides significant improvements:
+
+### 1. **Testability**
+
+- All dependencies are injectable via port interfaces
+- Easy to create mocks for unit testing
+- Commands can be tested without K8s cluster
+- Example: Test delete command with mock SessionService
+
+### 2. **Maintainability**
+
+- Clear separation of concerns (Presentation → Application → Infrastructure)
+- No circular dependencies
+- Each layer has single responsibility
+- Reduced code duplication (session operations centralized in SessionService)
+
+### 3. **Flexibility**
+
+- Swap implementations without changing application logic
+- Example: Replace file-based storage with database without touching commands
+- Example: Replace kubectl cp sync with mutagen without changing use cases
+
+### 4. **Clear Boundaries**
+
+- Presentation layer cannot import infrastructure directly
+- Enforced at compile time
+- Architecture violations are easy to detect with grep
+
+### 5. **Dependency Inversion**
+
+- High-level policy (application) doesn't depend on low-level details (infrastructure)
+- Infrastructure implements interfaces defined by application needs
+- Aligns with SOLID principles
+
+### 6. **Single Source of Truth**
+
+- All dependency wiring happens in one place (`pkg/application/app.go`)
+- Easy to understand how components are connected
+- Reduces "where is this instantiated?" questions
+
+### 7. **Incremental Migration**
+
+- Old and new architectures coexist during migration
+- No big-bang rewrite required
+- Commands can be migrated one at a time
+- CLI remains fully functional throughout migration
 
 ## Git Workflow
 
