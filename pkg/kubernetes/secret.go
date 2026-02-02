@@ -11,7 +11,8 @@ import (
 
 // CreateSecret creates a Kubernetes secret with the given data
 // The secret is labeled with app=kodama and session=<name> for easy management
-func (c *Client) CreateSecret(ctx context.Context, name, namespace string, data map[string]string) error {
+// If dryRun is true, returns the manifest without creating it
+func (c *Client) CreateSecret(ctx context.Context, name, namespace string, data map[string]string, dryRun bool) (*corev1.Secret, error) {
 	// Convert string map to byte map (K8s expects []byte values)
 	secretData := make(map[string][]byte)
 	for key, value := range data {
@@ -38,12 +39,17 @@ func (c *Client) CreateSecret(ctx context.Context, name, namespace string, data 
 		Type: corev1.SecretTypeOpaque,
 	}
 
-	_, err := c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create secret: %w", err)
+	// If dry-run, return the manifest without creating
+	if dryRun {
+		return secret, nil
 	}
 
-	return nil
+	_, err := c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secret: %w", err)
+	}
+
+	return secret, nil
 }
 
 // DeleteSecret deletes a Kubernetes secret

@@ -47,7 +47,8 @@ func buildInitContainers(spec *PodSpec) []corev1.Container {
 }
 
 // CreatePod creates a new pod in the cluster
-func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
+// If dryRun is true, returns the manifest without creating it
+func (c *Client) CreatePod(ctx context.Context, spec *PodSpec, dryRun bool) (*corev1.Pod, error) {
 	// Build init containers using the new config-based approach
 	initContainers := buildInitContainers(spec)
 
@@ -72,6 +73,10 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 	}
 
 	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      spec.Name,
 			Namespace: spec.Namespace,
@@ -103,7 +108,7 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 		}
 		// Validate port range before conversion
 		if ttydPort < 1 || ttydPort > 65535 {
-			return fmt.Errorf("invalid ttyd port: %d (must be between 1 and 65535)", ttydPort)
+			return nil, fmt.Errorf("invalid ttyd port: %d (must be between 1 and 65535)", ttydPort)
 		}
 		pod.Spec.Containers[0].Ports = []corev1.ContainerPort{
 			{
@@ -219,15 +224,20 @@ func (c *Client) CreatePod(ctx context.Context, spec *PodSpec) error {
 	pod.Spec.Volumes = volumes
 	pod.Spec.Containers[0].VolumeMounts = volumeMounts
 
+	// If dry-run, return the manifest without creating
+	if dryRun {
+		return pod, nil
+	}
+
 	_, err := c.clientset.CoreV1().Pods(spec.Namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			return fmt.Errorf("pod %s already exists in namespace %s", spec.Name, spec.Namespace)
+			return nil, fmt.Errorf("pod %s already exists in namespace %s", spec.Name, spec.Namespace)
 		}
-		return fmt.Errorf("failed to create pod %s in namespace %s: %w", spec.Name, spec.Namespace, err)
+		return nil, fmt.Errorf("failed to create pod %s in namespace %s: %w", spec.Name, spec.Namespace, err)
 	}
 
-	return nil
+	return pod, nil
 }
 
 // buildResourceRequirements creates resource requirements from CPU, memory, and custom resource limits

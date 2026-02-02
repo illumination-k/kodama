@@ -3,3 +3,4 @@ bin/
 kodama
 kubectl-kodama
 /.kodama.yaml
+.env

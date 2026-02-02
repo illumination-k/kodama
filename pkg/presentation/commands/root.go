@@ -31,6 +31,7 @@ environments in your Kubernetes cluster.`,
 	cmd.AddCommand(NewListCommand(app.SessionService))   // New refactored command
 	cmd.AddCommand(commands.NewAttachCommand())          // Keep using old attach command for now
 	cmd.AddCommand(NewDeleteCommand(app.SessionService)) // New refactored command
+	cmd.AddCommand(commands.NewDebugCommand())           // Debug command for manifest generation
 	cmd.AddCommand(commands.NewDevCommand())             // Keep using old dev command for now
 	cmd.AddCommand(newVersionCommand())
 

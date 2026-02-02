@@ -53,8 +53,8 @@ func TestCreateSecret(t *testing.T) {
 			fakeClientset := fake.NewSimpleClientset()
 			client := &Client{clientset: fakeClientset}
 
-			// Create secret
-			err := client.CreateSecret(context.Background(), tt.secretName, tt.namespace, tt.data)
+			// Create secret (not dry-run)
+			_, err := client.CreateSecret(context.Background(), tt.secretName, tt.namespace, tt.data, false)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSecret() error = %v, wantErr %v", err, tt.wantErr)

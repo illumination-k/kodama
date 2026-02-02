@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/illumination-k/kodama/pkg/agent"
 	"github.com/illumination-k/kodama/pkg/config"
 	"github.com/illumination-k/kodama/pkg/env"
@@ -24,6 +26,13 @@ import (
 type SecretFileMapping struct {
 	Source      string // Local file path
 	Destination string // Pod file path (absolute)
+}
+
+// ManifestCollection holds Kubernetes manifests generated during dry-run
+type ManifestCollection struct {
+	EnvSecret  *corev1.Secret // Optional environment variable secret
+	FileSecret *corev1.Secret // Optional file secret
+	Pod        *corev1.Pod    // Required pod manifest
 }
 
 // StartSessionOptions contains all options for starting a session
@@ -54,6 +63,8 @@ type StartSessionOptions struct {
 	EnvFiles        []string
 	EnvExclude      []string
 	SecretFiles     []SecretFileMapping
+	DryRun          bool                // If true, generate manifests without creating resources
+	Manifests       *ManifestCollection // Populated when DryRun is true
 }
 
 // AttachSessionOptions contains all options for attaching to a session
@@ -90,31 +101,40 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 			candidatePath := fmt.Sprintf("%s/.kodama.yaml", cwd)
 			if _, statErr := os.Stat(candidatePath); statErr == nil {
 				configFile = candidatePath
-				fmt.Printf("📄 Found .kodama.yaml in current directory\n")
+				if !opts.DryRun {
+					fmt.Printf("📄 Found .kodama.yaml in current directory\n")
+				}
 			}
 		}
 	}
 
 	if configFile != "" {
-		fmt.Printf("Loading session template from: %s\n", configFile)
+		if !opts.DryRun {
+			fmt.Printf("Loading session template from: %s\n", configFile)
+		}
 		var loadedTemplate *config.SessionConfig
 		loadedTemplate, err = store.LoadSessionTemplate(configFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load session template: %w", err)
 		}
 		templateConfig = loadedTemplate
-		fmt.Println("✓ Template loaded")
+		if !opts.DryRun {
+			fmt.Println("✓ Template loaded")
+		}
 	}
 
-	// 2. Check if session already exists
-	existingSessions, err := store.ListSessions()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list existing sessions: %w", err)
-	}
+	// 2. Check if session already exists (skip if dry-run)
+	if !opts.DryRun {
+		var existingSessions []*config.SessionConfig
+		existingSessions, err = store.ListSessions()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list existing sessions: %w", err)
+		}
 
-	for _, s := range existingSessions {
-		if s.Name == opts.Name {
-			return nil, fmt.Errorf("session '%s' already exists. Use 'kubectl kodama delete %s' to remove it first", opts.Name, opts.Name)
+		for _, s := range existingSessions {
+			if s.Name == opts.Name {
+				return nil, fmt.Errorf("session '%s' already exists. Use 'kubectl kodama delete %s' to remove it first", opts.Name, opts.Name)
+			}
 		}
 	}
 
@@ -263,9 +283,11 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		return nil, fmt.Errorf("invalid session configuration: %w", validateErr)
 	}
 
-	// 6. Save initial session config
-	if saveErr := store.SaveSession(session); saveErr != nil {
-		return nil, fmt.Errorf("failed to save session config: %w", saveErr)
+	// 6. Save initial session config (skip if dry-run)
+	if !opts.DryRun {
+		if saveErr := store.SaveSession(session); saveErr != nil {
+			return nil, fmt.Errorf("failed to save session config: %w", saveErr)
+		}
 	}
 
 	// Track which Kubernetes resources are created for cleanup on failure
@@ -279,9 +301,9 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		startSucceeded    bool // Set to true at the very end to skip cleanup
 	)
 
-	// Setup cleanup on error - will only run if startSucceeded is false
+	// Setup cleanup on error - will only run if startSucceeded is false and not dry-run
 	defer func() {
-		if !startSucceeded && k8sClient != nil {
+		if !opts.DryRun && !startSucceeded && k8sClient != nil {
 			// Clean up file secret if created
 			if fileSecretCreated && fileSecretName != "" {
 				_ = k8sClient.DeleteSecret(ctx, fileSecretName, namespace)
@@ -304,20 +326,32 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 	// 8. Update status to Starting
 	session.UpdateStatus(config.StatusStarting)
-	if err := store.SaveSession(session); err != nil {
-		return nil, fmt.Errorf("failed to update session status: %w", err)
+	if !opts.DryRun {
+		if err = store.SaveSession(session); err != nil {
+			return nil, fmt.Errorf("failed to update session status: %w", err)
+		}
+
+		// Progress indicator
+		fmt.Printf("Creating session '%s'...\n", opts.Name)
 	}
 
-	// Progress indicator
-	fmt.Printf("Creating session '%s'...\n", opts.Name)
+	// Initialize manifests collection if dry-run
+	var manifests *ManifestCollection
+	if opts.DryRun {
+		manifests = &ManifestCollection{}
+	}
 
 	// 8.5. Load and create dotenv secret (if dotenv files specified)
+	var envSecret *corev1.Secret
 	if len(session.Env.DotenvFiles) > 0 {
-		fmt.Printf("📝 Loading dotenv files...\n")
-		fmt.Printf("⚠️  Warning: Ensure .env files are not committed to version control\n")
+		if !opts.DryRun {
+			fmt.Printf("📝 Loading dotenv files...\n")
+			fmt.Printf("⚠️  Warning: Ensure .env files are not committed to version control\n")
+		}
 
 		// Load dotenv files
-		envVars, err := env.LoadDotenvFiles(session.Env.DotenvFiles)
+		var envVars map[string]string
+		envVars, err = env.LoadDotenvFiles(session.Env.DotenvFiles)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load dotenv files: %w", err)
 		}
@@ -330,54 +364,64 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 		// Validate variable names
 		for name := range envVars {
-			if err := env.ValidateVarName(name); err != nil {
+			if err = env.ValidateVarName(name); err != nil {
 				return nil, fmt.Errorf("invalid variable name '%s': %w", name, err)
 			}
 		}
 
 		// Validate secret size
-		if err := env.ValidateSecretSize(envVars); err != nil {
+		if err = env.ValidateSecretSize(envVars); err != nil {
 			return nil, err
 		}
 
 		// Create secret (only if there are variables to inject)
 		if len(envVars) > 0 {
 			secretName = fmt.Sprintf("kodama-env-%s", session.Name)
-			if err := k8sClient.CreateSecret(ctx, secretName, session.Namespace, envVars); err != nil {
+			envSecret, err = k8sClient.CreateSecret(ctx, secretName, session.Namespace, envVars, opts.DryRun)
+			if err != nil {
 				return nil, fmt.Errorf("failed to create environment secret: %w", err)
 			}
-			secretCreated = true
 
-			// Update session config with secret info
-			session.Env.SecretName = secretName
-			session.Env.SecretCreated = true
-			if err := store.SaveSession(session); err != nil {
-				return nil, fmt.Errorf("failed to save session: %w", err)
+			if opts.DryRun {
+				manifests.EnvSecret = envSecret
+			} else {
+				secretCreated = true
+
+				// Update session config with secret info
+				session.Env.SecretName = secretName
+				session.Env.SecretCreated = true
+				if err = store.SaveSession(session); err != nil {
+					return nil, fmt.Errorf("failed to save session: %w", err)
+				}
+
+				fmt.Printf("✅ Loaded %d environment variables\n", len(envVars))
 			}
-
-			fmt.Printf("✅ Loaded %d environment variables\n", len(envVars))
-		} else {
+		} else if !opts.DryRun {
 			fmt.Printf("⚠️  All variables were excluded - no environment variables will be injected\n")
 		}
 	}
 
 	// 8.6. Load and create file secret (if secret files specified)
+	var fileSecret *corev1.Secret
 	if len(session.SecretFile.Files) > 0 {
-		fmt.Printf("🔐 Loading secret files...\n")
+		if !opts.DryRun {
+			fmt.Printf("🔐 Loading secret files...\n")
+		}
 
 		// Validate mappings
-		if err := secretfile.ValidateMappings(session.SecretFile.Files); err != nil {
+		if err = secretfile.ValidateMappings(session.SecretFile.Files); err != nil {
 			return nil, fmt.Errorf("invalid secret file mappings: %w", err)
 		}
 
 		// Load file contents
-		fileContents, err := secretfile.LoadFiles(session.SecretFile.Files)
+		var fileContents map[string][]byte
+		fileContents, err = secretfile.LoadFiles(session.SecretFile.Files)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load secret files: %w", err)
 		}
 
 		// Validate secret size
-		if err := secretfile.ValidateSecretSize(fileContents); err != nil {
+		if err = secretfile.ValidateSecretSize(fileContents); err != nil {
 			return nil, err
 		}
 
@@ -385,26 +429,34 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		if len(fileContents) > 0 {
 			fileSecretName = fmt.Sprintf("kodama-secret-files-%s", session.Name)
 
-			if err := k8sClient.CreateFileSecret(ctx, fileSecretName, session.Namespace, fileContents); err != nil {
+			fileSecret, err = k8sClient.CreateFileSecret(ctx, fileSecretName, session.Namespace, fileContents, opts.DryRun)
+			if err != nil {
 				return nil, fmt.Errorf("failed to create secret file: %w", err)
 			}
-			fileSecretCreated = true
 
-			// Update session config with secret info
-			session.SecretFile.SecretName = fileSecretName
-			session.SecretFile.SecretCreated = true
-			if err := store.SaveSession(session); err != nil {
-				return nil, fmt.Errorf("failed to save session: %w", err)
+			if opts.DryRun {
+				manifests.FileSecret = fileSecret
+			} else {
+				fileSecretCreated = true
+
+				// Update session config with secret info
+				session.SecretFile.SecretName = fileSecretName
+				session.SecretFile.SecretCreated = true
+				if err = store.SaveSession(session); err != nil {
+					return nil, fmt.Errorf("failed to save session: %w", err)
+				}
+
+				fmt.Printf("✅ Loaded %d secret files\n", len(fileContents))
 			}
-
-			fmt.Printf("✅ Loaded %d secret files\n", len(fileContents))
-		} else {
+		} else if !opts.DryRun {
 			fmt.Printf("⚠️  No secret files were loaded (files may not exist)\n")
 		}
 	}
 
 	// 9. Create pod
-	fmt.Println("⏳ Creating pod...")
+	if !opts.DryRun {
+		fmt.Println("⏳ Creating pod...")
+	}
 
 	// Use image from session config (already resolved from CLI > template > global)
 	effectiveImage := session.Image
@@ -468,11 +520,20 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		TtydWritable: ttydWritable,
 	}
 
-	if err := k8sClient.CreatePod(ctx, podSpec); err != nil {
+	pod, err := k8sClient.CreatePod(ctx, podSpec, opts.DryRun)
+	if err != nil {
 		session.UpdateStatus(config.StatusFailed)
 		_ = store.SaveSession(session) // Best effort update
 		return nil, fmt.Errorf("failed to create pod: %w", err)
 	}
+
+	if opts.DryRun {
+		manifests.Pod = pod
+		// Return session with manifests for dry-run
+		session.ManifestsGenerated = manifests
+		return session, nil
+	}
+
 	podCreated = true
 	fmt.Println("✓ Pod created")
 
@@ -532,7 +593,7 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		return nil, fmt.Errorf("failed to save final session state: %w", err)
 	}
 
-	// 13. Execute coding agent task if prompt provided
+	// 13. Execute coding agent task if prompt provided (skip in dry-run)
 	if opts.Prompt != "" || opts.PromptFile != "" {
 		var finalPrompt string
 		var promptErr error

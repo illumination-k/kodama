@@ -66,6 +66,10 @@ type SessionConfig struct {
 	LastAgentRun    *time.Time                  `yaml:"lastAgentRun,omitempty"`
 	Env             env.EnvConfig               `yaml:"env,omitempty"`
 	SecretFile      secretfile.SecretFileConfig `yaml:"secretFile,omitempty"`
+
+	// ManifestsGenerated holds generated manifests when DryRun mode is used
+	// Not serialized to YAML as this is only used during manifest generation
+	ManifestsGenerated interface{} `yaml:"-"`
 }
 
 // GitCloneConfig holds git clone options
