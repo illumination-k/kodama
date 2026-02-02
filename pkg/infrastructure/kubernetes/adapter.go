@@ -27,7 +27,8 @@ func NewAdapter(kubeconfigPath string) (port.KubernetesClient, error) {
 
 // CreatePod creates a pod with the given specification
 func (a *Adapter) CreatePod(ctx context.Context, spec *k8s.PodSpec) error {
-	return a.client.CreatePod(ctx, spec)
+	_, err := a.client.CreatePod(ctx, spec, false)
+	return err
 }
 
 // GetPod retrieves the status of a pod
@@ -59,7 +60,8 @@ func (a *Adapter) GetPodIP(ctx context.Context, name, namespace string) (string,
 
 // CreateSecret creates a secret with the given data
 func (a *Adapter) CreateSecret(ctx context.Context, name, namespace string, data map[string]string) error {
-	return a.client.CreateSecret(ctx, name, namespace, data)
+	_, err := a.client.CreateSecret(ctx, name, namespace, data, false)
+	return err
 }
 
 // DeleteSecret deletes a secret
@@ -74,7 +76,8 @@ func (a *Adapter) SecretExists(ctx context.Context, name, namespace string) (boo
 
 // CreateFileSecret creates a secret from files
 func (a *Adapter) CreateFileSecret(ctx context.Context, name, namespace string, files map[string][]byte) error {
-	return a.client.CreateFileSecret(ctx, name, namespace, files)
+	_, err := a.client.CreateFileSecret(ctx, name, namespace, files, false)
+	return err
 }
 
 // Port forwarding

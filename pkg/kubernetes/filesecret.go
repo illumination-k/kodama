@@ -14,7 +14,8 @@ import (
 // The secret is labeled with app=kodama, session=<name>, and managed-by=kodama for easy management
 // File paths are base64-encoded to meet K8s secret key naming restrictions
 // Original paths are stored in annotations for reconstruction if needed
-func (c *Client) CreateFileSecret(ctx context.Context, name, namespace string, files map[string][]byte) error {
+// If dryRun is true, returns the manifest without creating it
+func (c *Client) CreateFileSecret(ctx context.Context, name, namespace string, files map[string][]byte, dryRun bool) (*corev1.Secret, error) {
 	// Convert file paths to base64-encoded secret keys
 	secretData := make(map[string][]byte)
 	annotations := make(map[string]string)
@@ -47,10 +48,15 @@ func (c *Client) CreateFileSecret(ctx context.Context, name, namespace string, f
 		Type: corev1.SecretTypeOpaque,
 	}
 
-	_, err := c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create file secret: %w", err)
+	// If dry-run, return the manifest without creating
+	if dryRun {
+		return secret, nil
 	}
 
-	return nil
+	_, err := c.clientset.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file secret: %w", err)
+	}
+
+	return secret, nil
 }

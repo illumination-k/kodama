@@ -29,6 +29,7 @@ environments in your Kubernetes cluster.`,
 	cmd.AddCommand(NewListCommand())
 	cmd.AddCommand(NewAttachCommand())
 	cmd.AddCommand(NewDeleteCommand())
+	cmd.AddCommand(NewDebugCommand())
 	cmd.AddCommand(NewDevCommand())
 	cmd.AddCommand(newVersionCommand())
 
