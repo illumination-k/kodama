@@ -125,7 +125,8 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 	// 2. Check if session already exists (skip if dry-run)
 	if !opts.DryRun {
-		existingSessions, err := store.ListSessions()
+		var existingSessions []*config.SessionConfig
+		existingSessions, err = store.ListSessions()
 		if err != nil {
 			return nil, fmt.Errorf("failed to list existing sessions: %w", err)
 		}
@@ -326,7 +327,7 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 	// 8. Update status to Starting
 	session.UpdateStatus(config.StatusStarting)
 	if !opts.DryRun {
-		if err := store.SaveSession(session); err != nil {
+		if err = store.SaveSession(session); err != nil {
 			return nil, fmt.Errorf("failed to update session status: %w", err)
 		}
 
@@ -349,7 +350,8 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 
 		// Load dotenv files
-		envVars, err := env.LoadDotenvFiles(session.Env.DotenvFiles)
+		var envVars map[string]string
+		envVars, err = env.LoadDotenvFiles(session.Env.DotenvFiles)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load dotenv files: %w", err)
 		}
@@ -362,13 +364,13 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 
 		// Validate variable names
 		for name := range envVars {
-			if err := env.ValidateVarName(name); err != nil {
+			if err = env.ValidateVarName(name); err != nil {
 				return nil, fmt.Errorf("invalid variable name '%s': %w", name, err)
 			}
 		}
 
 		// Validate secret size
-		if err := env.ValidateSecretSize(envVars); err != nil {
+		if err = env.ValidateSecretSize(envVars); err != nil {
 			return nil, err
 		}
 
@@ -388,7 +390,7 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 				// Update session config with secret info
 				session.Env.SecretName = secretName
 				session.Env.SecretCreated = true
-				if err := store.SaveSession(session); err != nil {
+				if err = store.SaveSession(session); err != nil {
 					return nil, fmt.Errorf("failed to save session: %w", err)
 				}
 
@@ -407,18 +409,19 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 		}
 
 		// Validate mappings
-		if err := secretfile.ValidateMappings(session.SecretFile.Files); err != nil {
+		if err = secretfile.ValidateMappings(session.SecretFile.Files); err != nil {
 			return nil, fmt.Errorf("invalid secret file mappings: %w", err)
 		}
 
 		// Load file contents
-		fileContents, err := secretfile.LoadFiles(session.SecretFile.Files)
+		var fileContents map[string][]byte
+		fileContents, err = secretfile.LoadFiles(session.SecretFile.Files)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load secret files: %w", err)
 		}
 
 		// Validate secret size
-		if err := secretfile.ValidateSecretSize(fileContents); err != nil {
+		if err = secretfile.ValidateSecretSize(fileContents); err != nil {
 			return nil, err
 		}
 
@@ -439,7 +442,7 @@ func StartSession(ctx context.Context, opts StartSessionOptions) (*config.Sessio
 				// Update session config with secret info
 				session.SecretFile.SecretName = fileSecretName
 				session.SecretFile.SecretCreated = true
-				if err := store.SaveSession(session); err != nil {
+				if err = store.SaveSession(session); err != nil {
 					return nil, fmt.Errorf("failed to save session: %w", err)
 				}
 
